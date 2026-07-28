@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MOCK_EXECUTIVE_USER } from "@/lib/mock-data";
-import { ShieldCheck, RefreshCw, LogOut, CheckCircle2, Lock } from "lucide-react";
+import { RefreshCw, LogOut, CheckCircle2, Lock } from "lucide-react";
 
 export default function SettingsPage() {
   const [isSyncing, setIsSyncing] = React.useState(false);

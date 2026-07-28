@@ -20,7 +20,7 @@ export function ThreePaneWorkspace({
   initialAction,
 }: ThreePaneWorkspaceProps) {
   const [threads, setThreads] = React.useState<EmailThread[]>(initialThreads);
-  const [activeFilter, setActiveFilter] = React.useState("all");
+  const [activeFilter, setActiveFilter] = React.useState<"all" | "urgent" | "action_needed" | "vip" | "archived">("all");
   const [activeThreadId, setActiveThreadId] = React.useState<string>(
     initialThreadId || initialThreads[0]?.id || ""
   );
@@ -28,17 +28,24 @@ export function ThreePaneWorkspace({
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
 
-  const refreshThreads = React.useCallback(async () => {
-    const updated = await EmailService.getThreads(activeFilter as any);
+  const handleFilterChange = (filterStr: string) => {
+    const validFilter = filterStr as "all" | "urgent" | "action_needed" | "vip" | "archived";
+    setActiveFilter(validFilter);
+    EmailService.getThreads(validFilter).then((updated) => {
+      setThreads(updated);
+      if (updated.length > 0 && !updated.some((t) => t.id === activeThreadId)) {
+        setActiveThreadId(updated[0].id);
+      }
+    });
+  };
+
+  const handleThreadUpdated = React.useCallback(async () => {
+    const updated = await EmailService.getThreads(activeFilter);
     setThreads(updated);
     if (updated.length > 0 && !updated.some((t) => t.id === activeThreadId)) {
       setActiveThreadId(updated[0].id);
     }
   }, [activeFilter, activeThreadId]);
-
-  React.useEffect(() => {
-    refreshThreads();
-  }, [activeFilter, refreshThreads]);
 
   // Keyboard navigation shortcuts: J (Next), K (Prev), E (Archive), R (Reply), S (Snooze)
   React.useEffect(() => {
@@ -65,19 +72,19 @@ export function ThreePaneWorkspace({
       } else if (e.key === "e" || e.key === "E") {
         e.preventDefault();
         if (activeThreadId) {
-          EmailService.archiveThread(activeThreadId).then(refreshThreads);
+          EmailService.archiveThread(activeThreadId).then(handleThreadUpdated);
         }
       } else if (e.key === "s" || e.key === "S") {
         e.preventDefault();
         if (activeThreadId) {
-          EmailService.snoozeThread(activeThreadId).then(refreshThreads);
+          EmailService.snoozeThread(activeThreadId).then(handleThreadUpdated);
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [threads, activeThreadId, refreshThreads]);
+  }, [threads, activeThreadId, handleThreadUpdated]);
 
   const handleSelectThread = (id: string) => {
     setActiveThreadId(id);
@@ -86,7 +93,7 @@ export function ThreePaneWorkspace({
 
   return (
     <div className="flex h-[calc(100vh-56px-3rem)] rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
-      {/* Pane 2: Thread Feed List (Width: 360px-400px on desktop, full width on mobile if list active) */}
+      {/* Pane 2: Thread Feed List */}
       <div
         className={`w-full lg:w-[380px] shrink-0 ${
           isMobileViewThread ? "hidden lg:block" : "block"
@@ -97,7 +104,7 @@ export function ThreePaneWorkspace({
           activeThreadId={activeThreadId}
           onSelectThread={handleSelectThread}
           activeFilter={activeFilter}
-          onFilterChange={setActiveFilter}
+          onFilterChange={handleFilterChange}
         />
       </div>
 
@@ -124,7 +131,7 @@ export function ThreePaneWorkspace({
 
             <ThreadReader
               thread={activeThread}
-              onThreadUpdated={refreshThreads}
+              onThreadUpdated={handleThreadUpdated}
               autoOpenReply={initialAction === "reply"}
             />
           </div>

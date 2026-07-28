@@ -5,7 +5,7 @@ import { AIDraftResponse, ToneModifier } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
-import { Sparkles, Send, RefreshCw, Check } from "lucide-react";
+import { Sparkles, Send, RefreshCw } from "lucide-react";
 import { AIService } from "@/lib/ai-service";
 import { EmailService } from "@/lib/email-service";
 
@@ -23,7 +23,6 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
 
   React.useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
 
     AIService.getDraftResponse(threadId, activeTone).then((res) => {
       if (isMounted) {
@@ -39,6 +38,7 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
   }, [threadId, activeTone]);
 
   const handleToneSelect = (tone: ToneModifier) => {
+    setIsLoading(true);
     setActiveTone(tone);
   };
 

@@ -1,40 +1,43 @@
-# PRIORA
+# Priora — AI Executive Email Assistant
 
-> Your inbox shouldn't decide your priorities. Priora does.
+Priora is an AI Executive Email Assistant designed for high-stress executives, founders, and leaders. It transforms raw email overload into calm, actionable clarity by answering a single question within 5 seconds of opening:
 
-Priora is an AI Executive Email Assistant that transforms your inbox into an intelligent workspace.
+> **"What do I need to pay attention to today?"**
 
-Unlike traditional email clients that sort emails chronologically, Priora understands context, urgency, intent, and relationships to surface what actually deserves your attention.
+## Project Tech Stack
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript (Strict Mode)
+- **Styling**: Tailwind CSS v4
+- **Primitives & Icons**: Radix UI Primitives, Lucide React
+- **Forms & Validation**: React Hook Form, Zod
 
-## Vision
+## Getting Started
 
-Email has become an information problem.
+### Prerequisites
+- Node.js v20+
+- npm v10+
 
-Priora solves it by acting as your executive assistant instead of another inbox.
+### Environment Setup
+Copy `.env.example` to `.env.local`:
+```bash
+cp .env.example .env.local
+```
 
-It can:
+### Installation & Development Server
+```bash
+npm install
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-- Prioritize emails by importance
-- Extract tasks and deadlines
-- Draft intelligent replies
-- Summarize conversations
-- Detect commitments
-- Find emails using natural language
-- Learn your communication style
-- Execute routine email workflows with approval
-
-## Tech Stack
-
-- Next.js
-- TypeScript
-- Tailwind CSS
-- Better Auth
-- Gmail API
-- Ollama
-- Gemma 4
-- PostgreSQL
-- Prisma
-
-## Status
-
-🚧 Under active development.
+## Project Structure
+```
+src/
+├── app/                  # Next.js 16 App Router
+│   ├── (auth)/           # Authentication route group
+│   ├── (dashboard)/      # Dashboard route group
+│   ├── globals.css       # Tailwind CSS v4 design tokens
+│   └── layout.tsx        # Root layout
+├── lib/                  # Utilities (cn helper)
+└── types/                # Domain type declarations
+```

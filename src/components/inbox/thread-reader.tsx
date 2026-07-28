@@ -20,7 +20,7 @@ interface ThreadReaderProps {
 
 export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadReaderProps) {
   const [summary, setSummary] = React.useState<AISummary | null>(null);
-  const [isReplyOpen, setIsReplyOpen] = React.useState(autoOpenReply || false);
+  const [isReplyOpen, setIsReplyOpen] = React.useState(!!autoOpenReply);
   const [expandedMessages, setExpandedMessages] = React.useState<Record<string, boolean>>({
     [thread.messages[thread.messages.length - 1]?.id || ""]: true,
   });
@@ -30,10 +30,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
 
   React.useEffect(() => {
     AIService.getThreadSummary(thread.id).then(setSummary);
-    if (autoOpenReply) {
-      setIsReplyOpen(true);
-    }
-  }, [thread.id, autoOpenReply]);
+  }, [thread.id]);
 
   const handleArchive = async () => {
     setIsArchiving(true);
