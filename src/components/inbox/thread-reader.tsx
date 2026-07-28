@@ -1,0 +1,186 @@
+"use client";
+
+import React from "react";
+import { EmailThread } from "@/types/email";
+import { AISummary } from "@/types/ai";
+import { AISummaryBanner } from "./ai-summary-banner";
+import { AIDraftComposer } from "./ai-draft-composer";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ShortcutKey } from "@/components/ui/shortcut-key";
+import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle } from "lucide-react";
+import { EmailService } from "@/lib/email-service";
+import { AIService } from "@/lib/ai-service";
+
+interface ThreadReaderProps {
+  thread: EmailThread;
+  onThreadUpdated: () => void;
+  autoOpenReply?: boolean;
+}
+
+export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadReaderProps) {
+  const [summary, setSummary] = React.useState<AISummary | null>(null);
+  const [isReplyOpen, setIsReplyOpen] = React.useState(autoOpenReply || false);
+  const [expandedMessages, setExpandedMessages] = React.useState<Record<string, boolean>>({
+    [thread.messages[thread.messages.length - 1]?.id || ""]: true,
+  });
+  const [isArchiving, setIsArchiving] = React.useState(false);
+  const [isSnoozing, setIsSnoozing] = React.useState(false);
+  const [isSentSuccess, setIsSentSuccess] = React.useState(false);
+
+  React.useEffect(() => {
+    AIService.getThreadSummary(thread.id).then(setSummary);
+    if (autoOpenReply) {
+      setIsReplyOpen(true);
+    }
+  }, [thread.id, autoOpenReply]);
+
+  const handleArchive = async () => {
+    setIsArchiving(true);
+    await EmailService.archiveThread(thread.id);
+    setIsArchiving(false);
+    onThreadUpdated();
+  };
+
+  const handleSnooze = async () => {
+    setIsSnoozing(true);
+    await EmailService.snoozeThread(thread.id);
+    setIsSnoozing(false);
+    onThreadUpdated();
+  };
+
+  const toggleMessage = (id: string) => {
+    setExpandedMessages((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleSentSuccess = () => {
+    setIsSentSuccess(true);
+    setTimeout(() => {
+      onThreadUpdated();
+    }, 1200);
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-slate-950 p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-6">
+      {/* Header Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2">
+            <h1 className="text-lg font-bold text-slate-100">{thread.subject}</h1>
+            {thread.priority === "urgent" && <Badge variant="urgent">Urgent</Badge>}
+            {thread.category === "vip" && <Badge variant="vip">VIP</Badge>}
+          </div>
+          <p className="text-2xs text-slate-400">
+            {thread.messages.length} message{thread.messages.length > 1 ? "s" : ""} in thread
+          </p>
+        </div>
+
+        {/* Action Toolbar */}
+        <div className="flex items-center space-x-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleArchive}
+            disabled={isArchiving}
+            className="text-xs"
+            title="Archive Thread (E)"
+          >
+            <Archive className="h-3.5 w-3.5 mr-1 text-slate-400" />
+            <span>Archive</span>
+            <ShortcutKey className="ml-1">E</ShortcutKey>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSnooze}
+            disabled={isSnoozing}
+            className="text-xs"
+            title="Snooze Thread (S)"
+          >
+            <Clock className="h-3.5 w-3.5 mr-1 text-slate-400" />
+            <span>Snooze</span>
+            <ShortcutKey className="ml-1">S</ShortcutKey>
+          </Button>
+
+          {!isReplyOpen && (
+            <Button
+              variant="ai-sparkle"
+              size="sm"
+              onClick={() => setIsReplyOpen(true)}
+              className="text-xs"
+            >
+              <span>Reply with AI</span>
+              <ShortcutKey className="ml-1">R</ShortcutKey>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Sent Confirmation Banner */}
+      {isSentSuccess && (
+        <div className="flex items-center space-x-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-300">
+          <CheckCircle className="h-4 w-4 text-emerald-400" />
+          <span>Email sent successfully! Thread archived.</span>
+        </div>
+      )}
+
+      {/* AI Summary Banner */}
+      {summary && <AISummaryBanner summary={summary} />}
+
+      {/* AI Composer (If Open) */}
+      {isReplyOpen && !isSentSuccess && (
+        <AIDraftComposer threadId={thread.id} onSentSuccess={handleSentSuccess} />
+      )}
+
+      {/* Thread Messages Timeline */}
+      <div className="space-y-3 pt-2">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          Email Conversation
+        </h3>
+
+        {thread.messages.map((msg) => {
+          const isExpanded = expandedMessages[msg.id];
+          return (
+            <div
+              key={msg.id}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden"
+            >
+              {/* Message Header */}
+              <button
+                onClick={() => toggleMessage(msg.id)}
+                className="flex w-full items-center justify-between p-3 text-left hover:bg-slate-800/40 transition-colors focus-ring"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-2xs font-bold text-slate-300 border border-slate-700">
+                    <User className="h-3.5 w-3.5 text-slate-400" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-200">
+                      {msg.sender.name}
+                    </span>
+                    <span className="text-2xs text-slate-400 ml-2">
+                      &lt;{msg.sender.email}&gt;
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3 text-2xs text-slate-400">
+                  <span>{msg.timestamp}</span>
+                  {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </div>
+              </button>
+
+              {/* Message Body */}
+              {isExpanded && (
+                <div className="p-4 pt-2 border-t border-slate-800/60 text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
+                  {msg.bodyText}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
