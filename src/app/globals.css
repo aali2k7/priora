@@ -2,85 +2,107 @@
 
 /* ==========================================================================
    PRIORA DESIGN SYSTEM FOUNDATION (Tailwind CSS v4)
-   Design Philosophy: Calm, Premium, Minimal, Glassmorphic, Executive Density
+   Cinematic Operating System Design: VisionOS / Linear / Raycast Aesthetic
    ========================================================================== */
 
 @theme {
   /* Color Tokens */
-  --color-background: #07090e;
-  --color-surface: #0f172a;
-  --color-surface-hover: #1e293b;
-  --color-surface-active: #334155;
+  --color-background: #05070c;
+  --color-surface: #0a0d16;
+  --color-surface-hover: #121828;
+  --color-surface-active: #1e293b;
 
   --color-foreground: #f8fafc;
   --color-foreground-secondary: #94a3b8;
   --color-foreground-muted: #64748b;
 
   --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-hover: rgba(255, 255, 255, 0.16);
+  --color-border-hover: rgba(255, 255, 255, 0.18);
 
-  /* Primary Brand (Indigo/Violet) */
+  /* Primary Brand (Indigo/Violet & VisionOS Cyan) */
   --color-primary: #6366f1;
   --color-primary-hover: #4f46e5;
-  --color-primary-subtle: rgba(99, 102, 241, 0.12);
+  --color-primary-subtle: rgba(99, 102, 241, 0.15);
 
-  /* AI Signature Accent (Cyan Glow) */
   --color-ai: #0ea5e9;
-  --color-ai-subtle: rgba(14, 165, 233, 0.12);
-  --color-ai-glow: rgba(14, 165, 233, 0.25);
+  --color-ai-subtle: rgba(14, 165, 233, 0.15);
+  --color-ai-glow: rgba(14, 165, 233, 0.35);
 
   /* Urgency & Status Palette */
   --color-urgent: #ef4444;
-  --color-urgent-subtle: rgba(239, 68, 68, 0.12);
+  --color-urgent-subtle: rgba(239, 68, 68, 0.15);
   
   --color-warning: #f59e0b;
-  --color-warning-subtle: rgba(245, 158, 11, 0.12);
+  --color-warning-subtle: rgba(245, 158, 11, 0.15);
 
   --color-success: #10b981;
-  --color-success-subtle: rgba(16, 185, 129, 0.12);
+  --color-success-subtle: rgba(16, 185, 129, 0.15);
 
-  /* Typography Sizes & Scale */
-  --text-2xs: 0.625rem; /* 10px */
-  --text-2xs--line-height: 0.875rem;
-
-  --text-xs: 0.75rem; /* 12px */
-  --text-xs--line-height: 1rem;
-
-  --text-sm: 0.8125rem; /* 13px */
-  --text-sm--line-height: 1.125rem;
-
-  --text-base: 0.875rem; /* 14px */
-  --text-base--line-height: 1.25rem;
-
-  --text-lg: 1rem; /* 16px */
-  --text-lg--line-height: 1.5rem;
-
-  --text-xl: 1.25rem; /* 20px */
-  --text-xl--line-height: 1.75rem;
-
-  --text-2xl: 1.5rem; /* 24px */
-  --text-2xl--line-height: 2rem;
+  /* Typography Scale */
+  --text-2xs: 0.625rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 2rem;
+  --text-4xl: 2.75rem;
+  --text-5xl: 3.75rem;
+  --text-6xl: 4.75rem;
 
   /* Border Radius Scale */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
   --radius-full: 9999px;
 
-  /* Elevation Shadows */
-  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
-  --shadow-panel: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
-  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
-  --shadow-ai: 0 0 16px 2px rgba(14, 165, 233, 0.2);
+  /* Shadows */
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-panel: 0 10px 30px -5px rgba(0, 0, 0, 0.7), 0 0 1px 1px rgba(255, 255, 255, 0.05);
+  --shadow-glass: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --shadow-ai: 0 0 24px rgba(14, 165, 233, 0.25);
+  --shadow-glow: 0 0 60px rgba(99, 102, 241, 0.2);
+}
 
-  /* Z-Index Scale */
-  --z-base: 0;
-  --z-above: 10;
-  --z-sticky: 20;
-  --z-dropdown: 30;
-  --z-drawer: 40;
-  --z-modal: 50;
-  --z-tooltip: 60;
+/* Keyframe Animations */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(1deg);
+  }
+}
+
+@keyframes float-reverse {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(12px) rotate(-1deg);
+  }
+}
+
+@keyframes pulse-orb {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(1000%);
+  }
 }
 
 /* Base Body Styles */
@@ -96,52 +118,74 @@
   }
 }
 
-/* Custom Executive Utility Classes */
+/* Custom Executive VisionOS Utility Classes */
 @layer utilities {
+  .animate-float-slow {
+    animation: float-slow 7s ease-in-out infinite;
+  }
+
+  .animate-float-reverse {
+    animation: float-reverse 8s ease-in-out infinite;
+  }
+
+  .animate-pulse-orb {
+    animation: pulse-orb 10s ease-in-out infinite;
+  }
+
+  /* Frosted Glass Button */
+  .frosted-button {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .frosted-button:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.06) 100%);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  /* VisionOS Floating Translucent Glass Card */
+  .vision-glass-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(7, 10, 18, 0.7) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .vision-glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 30px rgba(99, 102, 241, 0.15);
+  }
+
   /* Glassmorphic Panel Container */
   .glass-panel {
-    background-color: rgba(15, 23, 42, 0.75);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background-color: rgba(10, 13, 22, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  /* Glassmorphic Interactive Card */
-  .glass-card {
-    background-color: rgba(30, 41, 59, 0.4);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .glass-card:hover {
-    background-color: rgba(30, 41, 59, 0.65);
-    border-color: rgba(255, 255, 255, 0.14);
-  }
-
-  /* Executive Solid Surface Panel */
-  .executive-panel {
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-panel);
   }
 
   /* AI Signature Pill / Badge */
   .ai-badge {
-    background-color: var(--color-ai-subtle);
-    color: var(--color-ai);
-    border: 1px solid rgba(14, 165, 233, 0.25);
-    box-shadow: var(--shadow-ai);
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(99, 102, 241, 0.1) 100%);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    box-shadow: 0 0 20px rgba(14, 165, 233, 0.2);
   }
 
-  /* Focus Ring for Accessible Keyboard Navigation */
+  /* Focus Ring */
   .focus-ring {
     outline: none;
   }
-
   .focus-ring:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid #6366f1;
     outline-offset: 2px;
   }
 
@@ -150,24 +194,14 @@
     width: 6px;
     height: 6px;
   }
-
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
-
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.12);
     border-radius: 4px;
   }
-
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.25);
-  }
-
-  /* Executive Layout Container */
-  .layout-container {
-    max-width: 1440px;
-    margin-left: auto;
-    margin-right: auto;
   }
 }
