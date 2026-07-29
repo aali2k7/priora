@@ -10,12 +10,35 @@ export interface ExtractedTask {
   assigneeName?: string;
 }
 
+export interface KeyInformationData {
+  studentName?: string;
+  studentId?: string;
+  program?: string;
+  reason?: string;
+  requestedDates?: string;
+  parentsCCd?: string;
+  attachments?: string[];
+  urgency?: string;
+  approvalNeeded?: string;
+  confidenceScore?: number;
+}
+
+export interface RecommendedActionData {
+  actionTitle: string;
+  confidenceScore: number;
+  reasoning: string;
+}
+
 export interface AISummary {
   threadId: string;
   executiveBrief: string; // 2-sentence executive summary
   bulletPoints: string[];
   keyDecisionRequired?: string;
   urgencyScore: number; // 0 to 100
+  readingTimeSaved?: string; // E.g., "Original read: 45s • AI brief: 8s"
+  keyInformation?: KeyInformationData;
+  aiInsights?: string[];
+  recommendedAction?: RecommendedActionData;
 }
 
 export interface AIDraftResponse {

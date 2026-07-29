@@ -8,17 +8,26 @@ export interface EmailParticipant {
   isVIP?: boolean;
 }
 
+export interface EmailAttachment {
+  name: string;
+  size: string;
+  type?: string;
+  url?: string;
+}
+
 export interface EmailMessage {
   id: string;
   threadId: string;
   sender: EmailParticipant;
   recipients: EmailParticipant[];
+  ccRecipients?: EmailParticipant[];
   subject: string;
   bodySnippet: string;
   bodyHtml?: string;
   bodyText: string;
   timestamp: string;
   isUnread: boolean;
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailThread {

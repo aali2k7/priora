@@ -8,7 +8,7 @@ import { AIDraftComposer } from "./ai-draft-composer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
-import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle } from "lucide-react";
+import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle, FileText, Users } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
 import { AIService } from "@/lib/ai-service";
 
@@ -65,7 +65,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           <div className="flex items-center space-x-2">
             <h1 className="text-lg font-bold text-slate-100">{thread.subject}</h1>
             {thread.priority === "urgent" && <Badge variant="urgent">Urgent</Badge>}
-            {thread.category === "vip" && <Badge variant="vip">VIP</Badge>}
+            {thread.category === "vip" && <Badge variant="vip" className="font-medium">Student VIP</Badge>}
           </div>
           <p className="text-2xs text-slate-400">
             {thread.messages.length} message{thread.messages.length > 1 ? "s" : ""} in thread
@@ -118,11 +118,11 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
       {isSentSuccess && (
         <div className="flex items-center space-x-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-300">
           <CheckCircle className="h-4 w-4 text-emerald-400" />
-          <span>Email sent successfully! Thread archived.</span>
+          <span>Outing Approval Email Dispatched to Student & Parents! Thread Archived.</span>
         </div>
       )}
 
-      {/* AI Summary Banner */}
+      {/* AI Summary Banner & Key Info Panel */}
       {summary && <AISummaryBanner summary={summary} />}
 
       {/* AI Composer (If Open) */}
@@ -133,7 +133,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
       {/* Thread Messages Timeline */}
       <div className="space-y-3 pt-2">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-          Email Conversation
+          Email Conversation History
         </h3>
 
         {thread.messages.map((msg) => {
@@ -141,37 +141,77 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           return (
             <div
               key={msg.id}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden"
+              className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden shadow-sm"
             >
               {/* Message Header */}
               <button
                 onClick={() => toggleMessage(msg.id)}
-                className="flex w-full items-center justify-between p-3 text-left hover:bg-slate-800/40 transition-colors focus-ring"
+                className="flex w-full items-center justify-between p-3.5 text-left hover:bg-slate-800/40 transition-colors focus-ring cursor-pointer"
               >
-                <div className="flex items-center space-x-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-2xs font-bold text-slate-300 border border-slate-700">
-                    <User className="h-3.5 w-3.5 text-slate-400" />
+                <div className="flex items-center space-x-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-2xs font-bold text-slate-300 border border-slate-700 overflow-hidden shrink-0">
+                    {msg.sender.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={msg.sender.avatarUrl} alt={msg.sender.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <User className="h-4 w-4 text-slate-400" />
+                    )}
                   </div>
                   <div>
-                    <span className="text-xs font-semibold text-slate-200">
-                      {msg.sender.name}
-                    </span>
-                    <span className="text-2xs text-slate-400 ml-2">
-                      &lt;{msg.sender.email}&gt;
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-semibold text-slate-200">
+                        {msg.sender.name}
+                      </span>
+                      <span className="text-2xs text-slate-400">
+                        &lt;{msg.sender.email}&gt;
+                      </span>
+                    </div>
+
+                    {/* CC list if present */}
+                    {msg.ccRecipients && msg.ccRecipients.length > 0 && (
+                      <div className="flex items-center space-x-1 text-2xs text-emerald-400/90 mt-0.5 font-medium">
+                        <Users className="h-3 w-3 text-emerald-400 shrink-0" />
+                        <span>CC&apos;d Parents: {msg.ccRecipients.map((c) => c.name).join(", ")}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3 text-2xs text-slate-400">
+                <div className="flex items-center space-x-3 text-2xs text-slate-400 shrink-0">
                   <span>{msg.timestamp}</span>
                   {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </div>
               </button>
 
-              {/* Message Body */}
+              {/* Message Body & Attachments */}
               {isExpanded && (
-                <div className="p-4 pt-2 border-t border-slate-800/60 text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
-                  {msg.bodyText}
+                <div className="p-4 pt-2 border-t border-slate-800/60 space-y-4">
+                  <div className="text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
+                    {msg.bodyText}
+                  </div>
+
+                  {/* Attachments Section */}
+                  {msg.attachments && msg.attachments.length > 0 && (
+                    <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                      <span className="text-2xs font-bold uppercase text-slate-400 tracking-wider block">
+                        Attachments ({msg.attachments.length})
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {msg.attachments.map((att, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center space-x-2 rounded-md border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200 hover:border-sky-500/50 transition-colors"
+                          >
+                            <FileText className="h-4 w-4 text-sky-400" />
+                            <div>
+                              <p className="font-semibold text-2xs text-slate-200">{att.name}</p>
+                              <p className="text-2xs text-slate-400">{att.size}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
