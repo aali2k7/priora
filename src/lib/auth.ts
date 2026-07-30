@@ -26,6 +26,14 @@ export const auth = betterAuth({
     google: {
       clientId: googleClientId,
       clientSecret: googleClientSecret,
+      scope: [
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/gmail.readonly",
+      ],
+      accessType: "offline",
+      prompt: "consent",
     },
   },
   secret: process.env.BETTER_AUTH_SECRET || "priora_executive_better_auth_secret_key_2026",

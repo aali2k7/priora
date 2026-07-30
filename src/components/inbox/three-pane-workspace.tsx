@@ -26,6 +26,26 @@ export function ThreePaneWorkspace({
   );
   const [isMobileViewThread, setIsMobileViewThread] = React.useState(!!initialThreadId);
 
+  // Fetch live Gmail threads on workspace mount
+  React.useEffect(() => {
+    let isMounted = true;
+    fetch("/api/gmail/threads")
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.threads && data.threads.length > 0) {
+          setThreads(data.threads);
+          if (!initialThreadId || !data.threads.some((t: EmailThread) => t.id === initialThreadId)) {
+            setActiveThreadId(data.threads[0].id);
+          }
+        }
+      })
+      .catch((err) => console.error("[Workspace] Error loading Gmail threads:", err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialThreadId]);
+
   const activeThread = threads.find((t) => t.id === activeThreadId);
 
   const handleFilterChange = (filterStr: string) => {
