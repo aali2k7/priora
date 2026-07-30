@@ -1,45 +1,50 @@
 /**
- * Priora Design System Tokens
+ * Priora V2 Design System Tokens
  * Centralized design token definitions mirroring globals.css for type-safe usage.
+ * Primary Accent: Indigo Dominant
  */
 
 export const colors = {
-  background: "#07090e",
-  surface: "#0f172a",
-  surfaceHover: "#1e293b",
-  surfaceActive: "#334155",
+  // CSS Variables for dynamic theme adaptivity
+  background: "var(--bg-canvas)",
+  surface: "var(--bg-surface)",
+  surfaceHover: "var(--bg-surface-hover)",
+  surfaceActive: "var(--bg-surface-active)",
   
-  foreground: "#f8fafc",
-  foregroundSecondary: "#94a3b8",
-  foregroundMuted: "#64748b",
+  foreground: "var(--text-primary)",
+  foregroundSecondary: "var(--text-secondary)",
+  foregroundMuted: "var(--text-muted)",
 
-  border: "rgba(255, 255, 255, 0.08)",
-  borderHover: "rgba(255, 255, 255, 0.16)",
+  border: "var(--border-subtle)",
+  borderHover: "var(--border-hover)",
 
-  primary: "#6366f1",
-  primaryHover: "#4f46e5",
-  primarySubtle: "rgba(99, 102, 241, 0.12)",
-
-  ai: "#0ea5e9",
-  aiSubtle: "rgba(14, 165, 233, 0.12)",
-  aiGlow: "rgba(14, 165, 233, 0.25)",
+  primary: "var(--accent-primary)",
+  primaryHover: "var(--accent-primary-hover)",
+  primarySubtle: "var(--accent-primary-subtle)",
 
   status: {
-    urgent: "#ef4444",
-    urgentSubtle: "rgba(239, 68, 68, 0.12)",
-    warning: "#f59e0b",
-    warningSubtle: "rgba(245, 158, 11, 0.12)",
-    success: "#10b981",
-    successSubtle: "rgba(16, 185, 129, 0.12)",
-    neutral: "#64748b",
-    neutralSubtle: "rgba(100, 116, 139, 0.12)",
+    urgent: "var(--status-danger)",
+    urgentSubtle: "var(--status-danger-subtle)",
+    urgentBorder: "var(--status-danger-border)",
+    
+    warning: "var(--status-warning)",
+    warningSubtle: "var(--status-warning-subtle)",
+    warningBorder: "var(--status-warning-border)",
+    
+    success: "var(--status-success)",
+    successSubtle: "var(--status-success-subtle)",
+    successBorder: "var(--status-success-border)",
+    
+    neutral: "var(--text-muted)",
+    neutralSubtle: "var(--border-subtle)",
   },
 } as const;
 
 export const radius = {
-  sm: "4px",
-  md: "8px",
-  lg: "12px",
+  sm: "6px",
+  md: "10px",
+  lg: "16px",
+  xl: "24px",
   full: "9999px",
 } as const;
 
@@ -56,7 +61,7 @@ export const zIndex = {
 export const animation = {
   durationFast: "150ms",
   durationNormal: "200ms",
-  easingDefault: "cubic-bezier(0.4, 0, 0.2, 1)",
+  easingDefault: "cubic-bezier(0.16, 1, 0.3, 1)",
   easingExecutive: "cubic-bezier(0.16, 1, 0.3, 1)",
 } as const;
 

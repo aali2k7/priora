@@ -53,24 +53,24 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
 
   if (isLoading) {
     return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-4 animate-pulse space-y-3">
-        <div className="h-4 w-48 bg-slate-800 rounded" />
-        <div className="h-20 bg-slate-800 rounded" />
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 p-5 animate-pulse space-y-3 shadow-2xs">
+        <div className="h-4 w-48 bg-slate-200 dark:bg-slate-800 rounded" />
+        <div className="h-20 bg-slate-200 dark:bg-slate-800 rounded" />
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-indigo-500/30 bg-slate-900/90 p-4 shadow-panel space-y-4">
+    <div className="rounded-2xl border border-indigo-500/30 bg-white/90 dark:bg-slate-900/90 p-5 shadow-card dark:shadow-panel space-y-4 transition-all">
       {/* Draft Header & Strategy Tag */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-        <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-400">
-          <Sparkles className="h-4 w-4 text-sky-400" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+          <Sparkles className="h-4 w-4" />
           <span>AI Suggested Reply</span>
         </div>
 
         {draft && (
-          <p className="text-2xs text-slate-400 italic">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
             {draft.intentStrategy}
           </p>
         )}
@@ -78,7 +78,7 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
 
       {/* Tone Adjustment Pills */}
       <div className="flex items-center space-x-2 overflow-x-auto custom-scrollbar pb-1">
-        <span className="text-2xs text-slate-500 font-medium shrink-0">Adjust Tone:</span>
+        <span className="text-[11px] text-slate-500 font-medium shrink-0">Adjust Tone:</span>
         {[
           { id: "concise", label: "Concise" },
           { id: "formal", label: "Formal" },
@@ -90,10 +90,10 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
             <button
               key={t.id}
               onClick={() => handleToneSelect(t.id as ToneModifier)}
-              className={`px-2.5 py-1 text-2xs font-medium rounded-full border transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-3 py-1 text-[11px] font-medium rounded-full border transition-all cursor-pointer whitespace-nowrap ${
                 isSelected
-                  ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/50"
-                  : "bg-slate-800/60 text-slate-400 border-slate-700/60 hover:text-slate-200"
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs font-semibold"
+                  : "bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               {t.label}
@@ -107,12 +107,12 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
         value={draftText}
         onChange={(e) => setDraftText(e.target.value)}
         placeholder="Type or edit your response..."
-        className="min-h-[120px] font-sans text-xs sm:text-sm text-slate-100 bg-slate-950/80 border-slate-800"
+        className="min-h-[120px] font-sans text-xs sm:text-sm text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800"
       />
 
       {/* Actions Toolbar */}
       <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center space-x-2 text-2xs text-slate-500">
+        <div className="flex items-center space-x-1.5 text-[11px] text-slate-500">
           <span>Press</span>
           <ShortcutKey>⌘</ShortcutKey>
           <ShortcutKey>Enter</ShortcutKey>

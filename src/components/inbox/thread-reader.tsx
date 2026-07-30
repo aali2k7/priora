@@ -58,16 +58,16 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-6">
+    <div className="flex flex-col h-full bg-[var(--bg-canvas)] p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-6">
       {/* Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-4">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
-            <h1 className="text-lg font-bold text-slate-100">{thread.subject}</h1>
+            <h1 className="text-lg font-bold text-[var(--text-primary)]">{thread.subject}</h1>
             {thread.priority === "urgent" && <Badge variant="urgent">Urgent</Badge>}
-            {thread.category === "vip" && <Badge variant="vip" className="font-medium">Student VIP</Badge>}
+            {thread.category === "vip" && <Badge variant="vip">Student VIP</Badge>}
           </div>
-          <p className="text-2xs text-slate-400">
+          <p className="text-[11px] text-[var(--text-muted)]">
             {thread.messages.length} message{thread.messages.length > 1 ? "s" : ""} in thread
           </p>
         </div>
@@ -116,9 +116,9 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
 
       {/* Sent Confirmation Banner */}
       {isSentSuccess && (
-        <div className="flex items-center space-x-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs text-emerald-300">
-          <CheckCircle className="h-4 w-4 text-emerald-400" />
-          <span>Outing Approval Email Dispatched to Student & Parents! Thread Archived.</span>
+        <div className="flex items-center space-x-2.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-300 dark:border-emerald-500/30 p-4 text-xs text-emerald-800 dark:text-emerald-300 shadow-2xs">
+          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="font-medium">Outing Approval Email Dispatched to Student & Parents! Thread Archived.</span>
         </div>
       )}
 
@@ -132,7 +132,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
 
       {/* Thread Messages Timeline */}
       <div className="space-y-3 pt-2">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <h3 className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
           Email Conversation History
         </h3>
 
@@ -141,15 +141,15 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           return (
             <div
               key={msg.id}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden shadow-sm"
+              className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 overflow-hidden shadow-2xs"
             >
               {/* Message Header */}
               <button
                 onClick={() => toggleMessage(msg.id)}
-                className="flex w-full items-center justify-between p-3.5 text-left hover:bg-slate-800/40 transition-colors focus-ring cursor-pointer"
+                className="flex w-full items-center justify-between p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors focus-ring cursor-pointer"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-2xs font-bold text-slate-300 border border-slate-700 overflow-hidden shrink-0">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0">
                     {msg.sender.avatarUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={msg.sender.avatarUrl} alt={msg.sender.name} className="h-full w-full object-cover" />
@@ -159,25 +159,25 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
                   </div>
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs font-semibold text-slate-200">
+                      <span className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                         {msg.sender.name}
                       </span>
-                      <span className="text-2xs text-slate-400">
+                      <span className="text-[10px] text-slate-400">
                         &lt;{msg.sender.email}&gt;
                       </span>
                     </div>
 
                     {/* CC list if present */}
                     {msg.ccRecipients && msg.ccRecipients.length > 0 && (
-                      <div className="flex items-center space-x-1 text-2xs text-emerald-400/90 mt-0.5 font-medium">
-                        <Users className="h-3 w-3 text-emerald-400 shrink-0" />
+                      <div className="flex items-center space-x-1 text-[11px] text-emerald-700 dark:text-emerald-400/90 mt-0.5 font-medium">
+                        <Users className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span>CC&apos;d Parents: {msg.ccRecipients.map((c) => c.name).join(", ")}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3 text-2xs text-slate-400 shrink-0">
+                <div className="flex items-center space-x-3 text-[10px] text-slate-400 shrink-0">
                   <span>{msg.timestamp}</span>
                   {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </div>
@@ -185,27 +185,27 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
 
               {/* Message Body & Attachments */}
               {isExpanded && (
-                <div className="p-4 pt-2 border-t border-slate-800/60 space-y-4">
-                  <div className="text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
+                <div className="p-4 pt-2 border-t border-slate-200/80 dark:border-slate-800/60 space-y-4">
+                  <div className="text-xs sm:text-sm text-slate-800 dark:text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
                     {msg.bodyText}
                   </div>
 
                   {/* Attachments Section */}
                   {msg.attachments && msg.attachments.length > 0 && (
-                    <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                      <span className="text-2xs font-bold uppercase text-slate-400 tracking-wider block">
+                    <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 space-y-2">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block">
                         Attachments ({msg.attachments.length})
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {msg.attachments.map((att, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center space-x-2 rounded-md border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200 hover:border-sky-500/50 transition-colors"
+                            className="flex items-center space-x-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-2.5 text-xs text-slate-800 dark:text-slate-200 hover:border-indigo-500/50 transition-colors shadow-2xs"
                           >
-                            <FileText className="h-4 w-4 text-sky-400" />
+                            <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                             <div>
-                              <p className="font-semibold text-2xs text-slate-200">{att.name}</p>
-                              <p className="text-2xs text-slate-400">{att.size}</p>
+                              <p className="font-semibold text-[11px] text-slate-900 dark:text-slate-200">{att.name}</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400">{att.size}</p>
                             </div>
                           </div>
                         ))}

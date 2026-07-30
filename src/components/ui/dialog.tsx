@@ -32,19 +32,19 @@ export function Dialog({ isOpen, onClose, title, description, children }: Dialog
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity"
+        className="fixed inset-0 bg-slate-950/60 dark:bg-black/80 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
       {/* Content Card */}
-      <div className="relative z-50 w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl transition-all">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+      <div className="relative z-50 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-elevation transition-all">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h2 className="text-base font-semibold text-slate-100">{title}</h2>
-            {description && <p className="text-xs text-slate-400 mt-0.5">{description}</p>}
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
+            {description && <p className="text-xs text-[var(--text-muted)] mt-0.5">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors focus-ring"
+            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[var(--text-primary)] transition-colors focus-ring"
           >
             <X className="h-4 w-4" />
           </button>

@@ -24,7 +24,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 antialiased">
+    <div className="flex min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased transition-colors duration-200">
       {/* Navigation Sidebar */}
       <SidebarNav urgentCount={2} />
 

@@ -12,7 +12,12 @@ interface TabsProps {
 
 export function Tabs({ value, onValueChange, children, className }: TabsProps) {
   return (
-    <div className={cn("inline-flex items-center rounded-lg bg-slate-900/90 p-1 border border-slate-800", className)}>
+    <div
+      className={cn(
+        "inline-flex items-center rounded-lg bg-slate-100 dark:bg-slate-900/90 p-1 border border-slate-200 dark:border-slate-800 shadow-2xs",
+        className
+      )}
+    >
       {React.Children.map(children, (child) => {
         if (React.isValidElement<TabTriggerProps>(child)) {
           return React.cloneElement(child, {
@@ -41,10 +46,10 @@ export function TabTrigger({ children, isSelected, onClick, className, badge }: 
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center space-x-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all focus-ring cursor-pointer select-none",
+        "inline-flex items-center space-x-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150 focus-ring cursor-pointer select-none",
         isSelected
-          ? "bg-slate-800 text-slate-100 shadow-xs border border-slate-700/60"
-          : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40",
+          ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs border border-slate-200/80 dark:border-slate-700/60 font-semibold"
+          : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40",
         className
       )}
     >

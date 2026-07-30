@@ -92,7 +92,7 @@ export function ThreePaneWorkspace({
   };
 
   return (
-    <div className="flex h-[calc(100vh-56px-3rem)] rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+    <div className="flex h-[calc(100vh-56px-3rem)] rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-950/80 backdrop-blur-md overflow-hidden shadow-elevation transition-colors duration-200">
       {/* Pane 2: Thread Feed List */}
       <div
         className={`w-full lg:w-[380px] shrink-0 ${
@@ -117,12 +117,12 @@ export function ThreePaneWorkspace({
         {activeThread ? (
           <div className="flex flex-col h-full">
             {/* Mobile Back Button Header */}
-            <div className="lg:hidden p-2 border-b border-slate-800 bg-slate-900 flex items-center">
+            <div className="lg:hidden p-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsMobileViewThread(false)}
-                className="text-xs text-slate-300"
+                className="text-xs text-slate-700 dark:text-slate-300"
               >
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 <span>Back to Feed</span>
@@ -137,8 +137,8 @@ export function ThreePaneWorkspace({
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-500">
-            <Inbox className="h-10 w-10 text-slate-600 mb-3" />
-            <p className="text-sm font-semibold text-slate-300">No Thread Selected</p>
+            <Inbox className="h-10 w-10 text-slate-400 dark:text-slate-600 mb-3" />
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No Thread Selected</p>
             <p className="text-xs text-slate-500 mt-1 max-w-sm">
               Select an email from the feed list to view AI summaries and draft responses.
             </p>
