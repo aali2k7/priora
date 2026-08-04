@@ -1,13 +1,204 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Priora Production Database Schema (Neon PostgreSQL AI Cache Layer)
+// Gmail is the Source of Truth; PostgreSQL serves as an AI synthesis & vector cache.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// 1. Executive User Profile & Better Auth User
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  emailVerified Boolean        @default(false)
+  image         String?
+  avatarUrl     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  gmailAccounts GmailAccount[]
+  syncStates    SyncState[]
+}
+
+// 1b. Better Auth Session
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// 1c. Better Auth & OAuth Account (Google OAuth Tokens)
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?   @db.Text
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// 1d. Better Auth Verification
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+}
+
+
+// 2. Connected Gmail OAuth Account Metadata
+model GmailAccount {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email         String
+  historyId     String?
+  lastSyncedAt  DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  syncState     SyncState?
+  threads       Thread[]
+  emails        Email[]
+  labels        Label[]
+
+  @@unique([userId, email])
+  @@index([userId])
+}
+
+// 3. Gmail Sync State & Health Tracking
+model SyncState {
+  id                 String       @id @default(cuid())
+  accountId          String       @unique
+  account            GmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastHistoryId      String?
+  lastSyncedAt       DateTime     @default(now())
+  status             String       @default("idle") // "idle" | "syncing" | "error"
+  errorMessage       String?
+  totalThreadsSynced Int          @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+// 4. Aggregated Gmail Thread (AI Cache Layer)
+model Thread {
+  id                  String          @id @default(cuid())
+  gmailThreadId       String          // Gmail internal thread ID
+  accountId           String
+  account             GmailAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subject             String?
+  snippet             String?
+  isUnread            Boolean         @default(false)
+  isArchived          Boolean         @default(false)
+  isSnoozed           Boolean         @default(false)
+  snoozedUntil        DateTime?
+  lastMessageAt       DateTime?
+  internalDate        DateTime?
+  priority            String          @default("normal") // "urgent" | "high" | "normal" | "low"
+  category            String          @default("fyi")    // "action_required" | "deadline_today" | "vip" | "fyi" | "newsletter"
+  aiSummary           String?         @db.Text
+  executiveBrief      String?         @db.Text
+  keyDecisionRequired String?         @db.Text
+  urgencyScore        Int?
+  keyInformation      Json?           // Structured extracted key information
+  aiInsights          Json?           // Verification insights checklist
+  recommendedAction   Json?           // Recommended action & reasoning
+  embedding           String?         @db.Text // Vector embedding placeholder
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  emails              Email[]
+  labels              LabelOnThread[]
+
+  @@unique([accountId, gmailThreadId])
+  @@index([accountId])
+  @@index([priority])
+  @@index([category])
+  @@index([lastMessageAt])
+}
+
+// 5. Cached Email Message (Plain Text Only — NO HTML, NO Binary Attachments)
+model Email {
+  id             String       @id @default(cuid())
+  gmailId        String       // Gmail internal message ID
+  gmailThreadId  String
+  threadId       String
+  thread         Thread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        GmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subject        String?
+  fromEmail      String
+  fromName       String?
+  toEmail        String?
+  toName         String?
+  ccEmails       Json?        // Array of CC recipients metadata
+  snippet        String?
+  bodyText       String?      @db.Text // Plain text body ONLY
+  internalDate   DateTime
+  isUnread       Boolean      @default(false)
+  hasAttachments Boolean      @default(false)
+  attachmentMeta Json?        // Metadata only (names, sizes, types) — NO BINARIES
+  embedding      String?      @db.Text // Vector embedding placeholder
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([accountId, gmailId])
+  @@index([threadId])
+  @@index([accountId])
+  @@index([internalDate])
+}
+
+// 6. Gmail System & User Labels
+model Label {
+  id           String          @id @default(cuid())
+  gmailLabelId String          // e.g. "INBOX", "UNREAD", "STARRED", "IMPORTANT"
+  accountId    String
+  account      GmailAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name         String
+  type         String          @default("user") // "system" | "user"
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  threads      LabelOnThread[]
+
+  @@unique([accountId, gmailLabelId])
+  @@index([accountId])
+}
+
+// Join Model: Many-to-Many Relation between Label and Thread
+model LabelOnThread {
+  threadId  String
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  labelId   String
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([threadId, labelId])
+  @@index([labelId])
 }

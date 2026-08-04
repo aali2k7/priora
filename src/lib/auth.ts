@@ -1,11 +1,6 @@
 import { betterAuth } from "better-auth";
-import Database from "better-sqlite3";
-import { initBetterAuthDb } from "./db-init";
-
-// Programmatically ensure database schema tables exist before initializing Better Auth
-initBetterAuthDb("./sqlite.db");
-
-const db = new Database("./sqlite.db");
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { prisma } from "@/lib/prisma";
 
 const googleClientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
 const googleClientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
@@ -21,7 +16,9 @@ if (isPlaceholderId) {
 }
 
 export const auth = betterAuth({
-  database: db,
+  database: prismaAdapter(prisma, {
+    provider: "postgresql",
+  }),
   socialProviders: {
     google: {
       clientId: googleClientId,

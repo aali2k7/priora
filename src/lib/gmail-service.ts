@@ -1,15 +1,6 @@
-import Database from "better-sqlite3";
+import { prisma } from "@/lib/prisma";
 import { EmailThread, EmailMessage, PriorityLevel, CategoryTag } from "@/types/email";
 import { MOCK_THREADS } from "@/lib/mock-data";
-
-interface AccountRecord {
-  id: string;
-  userId: string;
-  providerId: string;
-  accessToken: string | null;
-  refreshToken: string | null;
-  accessTokenExpiresAt: number | null;
-}
 
 interface GmailHeader {
   name: string;
@@ -28,12 +19,12 @@ interface RawGmailMessage {
 
 export async function getValidAccessToken(userId: string): Promise<string | null> {
   try {
-    const db = new Database("./sqlite.db");
-    const stmt = db.prepare<[string]>(
-      "SELECT id, userId, providerId, accessToken, refreshToken, accessTokenExpiresAt FROM account WHERE userId = ? AND providerId = 'google' LIMIT 1"
-    );
-    const account = stmt.get(userId) as AccountRecord | undefined;
-    db.close();
+    const account = await prisma.account.findFirst({
+      where: {
+        userId,
+        providerId: "google",
+      },
+    });
 
     if (!account || !account.accessToken) {
       console.log(`[Gmail Service] No Google access token found for user ${userId}`);
@@ -41,7 +32,8 @@ export async function getValidAccessToken(userId: string): Promise<string | null
     }
 
     const now = Date.now();
-    const isExpired = account.accessTokenExpiresAt ? account.accessTokenExpiresAt < now + 60000 : false;
+    const expiresAt = account.accessTokenExpiresAt ? account.accessTokenExpiresAt.getTime() : null;
+    const isExpired = expiresAt ? expiresAt < now + 60000 : false;
 
     // Token is still valid
     if (!isExpired) {
@@ -68,15 +60,16 @@ export async function getValidAccessToken(userId: string): Promise<string | null
       if (refreshRes.ok) {
         const tokenData = await refreshRes.json();
         const newAccessToken = tokenData.access_token;
-        const newExpiresAt = Date.now() + (tokenData.expires_in || 3600) * 1000;
+        const newExpiresAt = new Date(Date.now() + (tokenData.expires_in || 3600) * 1000);
 
-        // Persist updated token to SQLite DB
-        const updateDb = new Database("./sqlite.db");
-        const updateStmt = updateDb.prepare(
-          "UPDATE account SET accessToken = ?, accessTokenExpiresAt = ? WHERE id = ?"
-        );
-        updateStmt.run(newAccessToken, newExpiresAt, account.id);
-        updateDb.close();
+        // Persist updated token to PostgreSQL DB via Prisma
+        await prisma.account.update({
+          where: { id: account.id },
+          data: {
+            accessToken: newAccessToken,
+            accessTokenExpiresAt: newExpiresAt,
+          },
+        });
 
         return newAccessToken;
       } else {
