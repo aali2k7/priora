@@ -73,7 +73,8 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 
         return newAccessToken;
       } else {
-        console.error(`[Gmail Service] Failed to refresh token: ${refreshRes.statusText}`);
+        const errText = await refreshRes.text();
+        console.error(`[Gmail Service] Failed to refresh token (${refreshRes.status}): ${errText}`);
       }
     }
 

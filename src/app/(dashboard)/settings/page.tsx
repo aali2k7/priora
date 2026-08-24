@@ -24,9 +24,15 @@ export default function SettingsPage() {
       }
     : MOCK_EXECUTIVE_USER;
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setIsSyncing(true);
-    setTimeout(() => setIsSyncing(false), 1200);
+    try {
+      await fetch("/api/gmail/sync", { method: "POST" });
+    } catch (err) {
+      console.error("Sync error:", err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleSignOut = async () => {
