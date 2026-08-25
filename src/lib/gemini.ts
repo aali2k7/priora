@@ -5,8 +5,8 @@ import { GeminiEmailAnalysis, ToneModifier, KeyInformationData } from "@/types/a
  * Server-side Google Gemini client instance.
  * Strictly server-side: GEMINI_API_KEY is never exposed to the client/browser.
  */
-const GEMINI_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
+const FALLBACK_MODEL = "gemini-2.5-pro";
 
 function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
