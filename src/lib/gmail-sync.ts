@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getValidAccessToken } from "@/lib/gmail-service";
 import { AIService } from "@/lib/ai-service";
+import { cleanupExpiredLocalData } from "@/lib/retention";
 
 interface GmailHeader {
   name: string;
@@ -139,9 +140,11 @@ export async function syncUserGmailInbox(userId: string): Promise<{
 
     console.log(`[Gmail Sync] Starting sync for account ${gmailAccount.email} (SyncState: ${syncState.id})...`);
 
-    // 5. Fetch newest 100 threads from Gmail REST API
+    // 5. Fetch newest threads from Gmail REST API within 15-day retention window
+    const fifteenDaysAgoSeconds = Math.floor((Date.now() - 15 * 24 * 60 * 60 * 1000) / 1000);
+    const gmailQuery = `after:${fifteenDaysAgoSeconds}`;
     const threadsListRes = await fetch(
-      "https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=100",
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=100&q=${encodeURIComponent(gmailQuery)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
@@ -378,9 +381,14 @@ export async function syncUserGmailInbox(userId: string): Promise<{
       },
     });
 
+    // 10. Run local rolling 15-day retention cleanup (strictly local DB only, Gmail remains untouched)
+    await cleanupExpiredLocalData(gmailAccount.id, 15).catch((retErr) => {
+      console.error("[Gmail Sync] Retention cleanup warning:", retErr);
+    });
+
     console.log(`[Gmail Sync] Successfully synced ${threadsSyncedCount} threads for user ${userId}.`);
 
-    // 10. Automatically pass unanalyzed threads through the Gemini analysis pipeline in background
+    // 11. Automatically pass unanalyzed threads through the Gemini analysis pipeline in background
     if (process.env.GEMINI_API_KEY) {
       AIService.analyzeUnanalyzedThreadsForAccount(gmailAccount.id, 8).catch((aiErr) => {
         console.error(`[Gmail Sync -> Gemini Analysis] Background analysis error:`, aiErr);

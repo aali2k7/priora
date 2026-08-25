@@ -34,7 +34,7 @@ export interface AISummary {
   executiveBrief: string; // 2-sentence executive summary
   bulletPoints: string[];
   keyDecisionRequired?: string;
-  urgencyScore: number; // 0 to 100
+  urgencyScore?: number; // 0 to 100
   importanceScore?: number; // 0 to 100
   actionRequired?: boolean;
   readingTimeSaved?: string; // E.g., "Original read: 45s • AI brief: 8s"

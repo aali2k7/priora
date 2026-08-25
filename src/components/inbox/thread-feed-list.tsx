@@ -53,6 +53,7 @@ export function ThreadFeedList({
             <TabTrigger value="urgent">Urgent</TabTrigger>
             <TabTrigger value="action_needed">Action Needed</TabTrigger>
             <TabTrigger value="vip">VIP</TabTrigger>
+            <TabTrigger value="archived">Archived</TabTrigger>
           </Tabs>
         </div>
 

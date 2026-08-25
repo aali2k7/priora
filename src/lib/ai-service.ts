@@ -71,7 +71,7 @@ export class AIService {
       const threads = await prisma.thread.findMany({
         where: whereClause,
         orderBy: { lastMessageAt: "desc" },
-        take: 50,
+        take: 100,
       });
 
       if (threads.length === 0) {
@@ -239,9 +239,8 @@ export class AIService {
         }
         return {
           threadId,
-          executiveBrief: "Thread details are currently being processed.",
-          bulletPoints: ["Review conversation history."],
-          urgencyScore: 50,
+          executiveBrief: "Analysis pending",
+          bulletPoints: ["Thread details are being indexed."],
         };
       }
 
@@ -259,7 +258,7 @@ export class AIService {
         }
       }
 
-      // Fallback summary from DB thread fields
+      // Fallback summary from DB thread fields without fake urgency scores
       return this.formatThreadToAISummary(thread as DbThreadWithEmails);
     } catch (error: unknown) {
       console.error(`[AIService.getThreadSummary] Error for thread ${threadId}:`, error);
@@ -268,9 +267,8 @@ export class AIService {
       }
       return {
         threadId,
-        executiveBrief: "Executive review required. This thread contains pending items.",
-        bulletPoints: ["Review conversation history below."],
-        urgencyScore: 50,
+        executiveBrief: "Analysis unavailable",
+        bulletPoints: ["Unable to load AI analysis."],
       };
     }
   }
@@ -438,9 +436,9 @@ export class AIService {
         `${thread.subject || "Email thread"}: Review required.`,
       bulletPoints,
       keyDecisionRequired: thread.keyDecisionRequired || undefined,
-      urgencyScore: thread.urgencyScore ?? (thread.priority === "urgent" ? 90 : 50),
-      importanceScore: thread.importanceScore ?? 50,
-      actionRequired: thread.actionRequired ?? (thread.priority === "urgent"),
+      urgencyScore: thread.urgencyScore ?? undefined,
+      importanceScore: thread.importanceScore ?? undefined,
+      actionRequired: thread.actionRequired ?? undefined,
       readingTimeSaved,
       keyInformation: (typeof thread.keyInformation === "object" && thread.keyInformation !== null ? (thread.keyInformation as unknown as KeyInformationData) : undefined),
       aiInsights: rawInsights.length > 0 ? rawInsights : undefined,

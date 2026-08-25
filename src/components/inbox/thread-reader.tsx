@@ -49,11 +49,12 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
       if (!ignore) {
         setSummary({
           threadId: thread.id,
-          executiveBrief: thread.executiveBrief || thread.aiSummary || thread.snippet || "Review required.",
+          executiveBrief: thread.analyzedAt ? (thread.executiveBrief || thread.aiSummary || thread.snippet || "Review required.") : (thread.snippet || "Review conversation details below."),
           bulletPoints: [thread.snippet || "Conversation details available in history."],
-          urgencyScore: thread.urgencyScore ?? (thread.priority === "urgent" ? 90 : 50),
-          importanceScore: thread.importanceScore ?? 50,
-          actionRequired: thread.actionRequired ?? (thread.priority === "urgent"),
+          urgencyScore: thread.urgencyScore ?? undefined,
+          importanceScore: thread.importanceScore ?? undefined,
+          actionRequired: thread.actionRequired ?? undefined,
+          analyzedAt: thread.analyzedAt,
         });
       }
     }

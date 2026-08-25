@@ -47,9 +47,15 @@ export function AISummaryBanner({ summary, onReanalyze, isReanalyzing }: AISumma
               {summary.readingTimeSaved}
             </span>
           )}
-          <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
-            Urgency Score: {summary.urgencyScore}/100
-          </span>
+          {summary.analyzedAt && typeof summary.urgencyScore === "number" ? (
+            <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+              Urgency Score: {summary.urgencyScore}/100
+            </span>
+          ) : (
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
+              Analysis pending
+            </span>
+          )}
         </div>
       </div>
 
