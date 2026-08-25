@@ -126,10 +126,15 @@ model Thread {
   executiveBrief      String?         @db.Text
   keyDecisionRequired String?         @db.Text
   urgencyScore        Int?
+  importanceScore     Int?
+  actionRequired      Boolean?        @default(false)
+  suggestedReply      String?         @db.Text
   keyInformation      Json?           // Structured extracted key information
   aiInsights          Json?           // Verification insights checklist
   recommendedAction   Json?           // Recommended action & reasoning
   embedding           String?         @db.Text // Vector embedding placeholder
+  analyzedAt          DateTime?
+  aiVersion           Int?            @default(1)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 

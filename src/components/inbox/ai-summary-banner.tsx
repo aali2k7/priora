@@ -1,12 +1,15 @@
 import React from "react";
-import { Sparkles, AlertCircle, CheckCircle2, Clock, FileText, UserCheck, ShieldCheck, Award } from "lucide-react";
+import { Sparkles, AlertCircle, CheckCircle2, Clock, FileText, UserCheck, ShieldCheck, Award, RefreshCw } from "lucide-react";
 import { AISummary } from "@/types/ai";
+import { Button } from "@/components/ui/button";
 
 interface AISummaryBannerProps {
   summary: AISummary;
+  onReanalyze?: () => void;
+  isReanalyzing?: boolean;
 }
 
-export function AISummaryBanner({ summary }: AISummaryBannerProps) {
+export function AISummaryBanner({ summary, onReanalyze, isReanalyzing }: AISummaryBannerProps) {
   const keyInfo = summary.keyInformation;
   const insights = summary.aiInsights;
   const recAction = summary.recommendedAction;
@@ -18,9 +21,27 @@ export function AISummaryBanner({ summary }: AISummaryBannerProps) {
         <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
           <Sparkles className="h-4 w-4" />
           <span>Executive Brief & Decision Engine</span>
+          {summary.analyzedAt && (
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+              Gemini AI
+            </span>
+          )}
         </div>
 
         <div className="flex items-center space-x-2">
+          {onReanalyze && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onReanalyze}
+              disabled={isReanalyzing}
+              className="text-[11px] h-7 px-2.5 text-slate-600 dark:text-slate-300"
+              title="Request fresh Gemini AI analysis"
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${isReanalyzing ? "animate-spin text-indigo-500" : "text-slate-400"}`} />
+              <span>{isReanalyzing ? "Analyzing..." : "Re-analyze"}</span>
+            </Button>
+          )}
           {summary.readingTimeSaved && (
             <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
               {summary.readingTimeSaved}

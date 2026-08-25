@@ -42,6 +42,13 @@ export interface EmailThread {
   snoozedUntil?: string;
   priority: PriorityLevel;
   category: CategoryTag;
+  aiSummary?: string;
+  executiveBrief?: string;
+  urgencyScore?: number;
+  importanceScore?: number;
+  actionRequired?: boolean;
+  analyzedAt?: string;
   messages: EmailMessage[];
   unreadCount: number;
 }
+

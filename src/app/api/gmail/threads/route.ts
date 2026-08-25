@@ -97,6 +97,12 @@ export async function GET() {
         isSnoozed: t.isSnoozed,
         priority: (t.priority as PriorityLevel) || "normal",
         category: (t.category as CategoryTag) || "fyi",
+        aiSummary: t.aiSummary || undefined,
+        executiveBrief: t.executiveBrief || undefined,
+        urgencyScore: t.urgencyScore ?? undefined,
+        importanceScore: t.importanceScore ?? undefined,
+        actionRequired: t.actionRequired ?? undefined,
+        analyzedAt: t.analyzedAt ? t.analyzedAt.toISOString() : undefined,
         messages,
         unreadCount: messages.filter((m) => m.isUnread).length,
       };

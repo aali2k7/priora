@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
 import { Sparkles, Send, RefreshCw } from "lucide-react";
-import { AIService } from "@/lib/ai-service";
 import { EmailService } from "@/lib/email-service";
 
 interface AIDraftComposerProps {
@@ -24,13 +23,38 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
   React.useEffect(() => {
     let isMounted = true;
 
-    AIService.getDraftResponse(threadId, activeTone).then((res) => {
+    async function fetchDraft() {
+      try {
+        const res = await fetch(
+          `/api/ai/draft?threadId=${encodeURIComponent(threadId)}&tone=${encodeURIComponent(activeTone)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.draft && isMounted) {
+            setDraft(data.draft);
+            setDraftText(data.draft.draftText);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("[AIDraftComposer] API fetch failed, using fallback:", err);
+      }
+
       if (isMounted) {
-        setDraft(res);
-        setDraftText(res.draftText);
+        setDraft({
+          threadId,
+          intentStrategy: `Strategy: Responding in ${activeTone} tone.`,
+          draftText: "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest,\nAlex Mercer",
+          suggestedTone: activeTone,
+          lastUpdated: "Just now",
+        });
+        setDraftText("Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest,\nAlex Mercer");
         setIsLoading(false);
       }
-    });
+    }
+
+    fetchDraft();
 
     return () => {
       isMounted = false;

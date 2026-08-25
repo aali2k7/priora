@@ -35,10 +35,33 @@ export interface AISummary {
   bulletPoints: string[];
   keyDecisionRequired?: string;
   urgencyScore: number; // 0 to 100
+  importanceScore?: number; // 0 to 100
+  actionRequired?: boolean;
   readingTimeSaved?: string; // E.g., "Original read: 45s • AI brief: 8s"
   keyInformation?: KeyInformationData;
   aiInsights?: string[];
   recommendedAction?: RecommendedActionData;
+  suggestedReply?: string;
+  analyzedAt?: string;
+}
+
+export interface GeminiEmailAnalysis {
+  summary: string;
+  executiveBrief: string;
+  priority: "urgent" | "high" | "normal" | "low";
+  category: "action_required" | "deadline_today" | "vip" | "fyi" | "newsletter";
+  urgencyScore: number;
+  importanceScore: number;
+  actionRequired: boolean;
+  actionItems: string[];
+  deadline: string | null;
+  keyDecisionRequired: string | null;
+  sentiment: "positive" | "neutral" | "urgent" | "frustrated" | "professional";
+  reason: string;
+  keyInformation: KeyInformationData;
+  aiInsights: string[];
+  suggestedAction: string;
+  suggestedReply: string;
 }
 
 export interface AIDraftResponse {
@@ -56,3 +79,4 @@ export interface ExecutiveBriefing {
   waitingOnCount: number;
   topActionItems: ExtractedTask[];
 }
+

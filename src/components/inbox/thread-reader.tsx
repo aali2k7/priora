@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
 import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle, FileText, Users } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
-import { AIService } from "@/lib/ai-service";
 
 interface ThreadReaderProps {
   thread: EmailThread;
@@ -20,6 +19,7 @@ interface ThreadReaderProps {
 
 export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadReaderProps) {
   const [summary, setSummary] = React.useState<AISummary | null>(null);
+  const [isReanalyzing, setIsReanalyzing] = React.useState(false);
   const [isReplyOpen, setIsReplyOpen] = React.useState(!!autoOpenReply);
   const [expandedMessages, setExpandedMessages] = React.useState<Record<string, boolean>>({
     [thread.messages[thread.messages.length - 1]?.id || ""]: true,
@@ -29,8 +29,63 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
   const [isSentSuccess, setIsSentSuccess] = React.useState(false);
 
   React.useEffect(() => {
-    AIService.getThreadSummary(thread.id).then(setSummary);
-  }, [thread.id]);
+    let ignore = false;
+
+    async function fetchSummary() {
+      try {
+        const res = await fetch(`/api/ai/summary?threadId=${encodeURIComponent(thread.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.summary && !ignore) {
+            setSummary(data.summary);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("[ThreadReader] Failed to fetch summary from API, using fallback:", err);
+      }
+
+      // Fallback from thread properties
+      if (!ignore) {
+        setSummary({
+          threadId: thread.id,
+          executiveBrief: thread.executiveBrief || thread.aiSummary || thread.snippet || "Review required.",
+          bulletPoints: [thread.snippet || "Conversation details available in history."],
+          urgencyScore: thread.urgencyScore ?? (thread.priority === "urgent" ? 90 : 50),
+          importanceScore: thread.importanceScore ?? 50,
+          actionRequired: thread.actionRequired ?? (thread.priority === "urgent"),
+        });
+      }
+    }
+
+    fetchSummary();
+
+    return () => {
+      ignore = true;
+    };
+  }, [thread]);
+
+  const handleReanalyze = async () => {
+    setIsReanalyzing(true);
+    try {
+      const res = await fetch("/api/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId: thread.id, force: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.summary) {
+          setSummary(data.summary);
+          onThreadUpdated();
+        }
+      }
+    } catch (err) {
+      console.error("[ThreadReader] Error re-analyzing with Gemini:", err);
+    } finally {
+      setIsReanalyzing(false);
+    }
+  };
 
   const handleArchive = async () => {
     setIsArchiving(true);
@@ -123,7 +178,13 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
       )}
 
       {/* AI Summary Banner & Key Info Panel */}
-      {summary && <AISummaryBanner summary={summary} />}
+      {summary && (
+        <AISummaryBanner
+          summary={summary}
+          onReanalyze={handleReanalyze}
+          isReanalyzing={isReanalyzing}
+        />
+      )}
 
       {/* AI Composer (If Open) */}
       {isReplyOpen && !isSentSuccess && (

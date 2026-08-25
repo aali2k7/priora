@@ -116,10 +116,16 @@ export function ThreadFeedList({
                 </p>
 
                 <div className="flex items-center space-x-2 mt-2 pt-1">
-                  <span className="inline-flex items-center text-[10px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">
-                    <Sparkles className="h-2.5 w-2.5 mr-1" />
-                    Summarized
-                  </span>
+                  {thread.analyzedAt ? (
+                    <span className="inline-flex items-center text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                      <Sparkles className="h-2.5 w-2.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+                      AI Analyzed {typeof thread.urgencyScore === "number" ? `• ${thread.urgencyScore}/100` : ""}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
+                      Pending AI
+                    </span>
+                  )}
                 </div>
               </button>
             );

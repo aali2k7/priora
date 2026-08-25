@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getValidAccessToken } from "@/lib/gmail-service";
+import { AIService } from "@/lib/ai-service";
 
 interface GmailHeader {
   name: string;
@@ -217,7 +218,17 @@ export async function syncUserGmailInbox(userId: string): Promise<{
         // Executive brief heuristic synthesis
         const executiveBrief = `${senderNameSummary(fromName, fromEmail)}: ${subject}. ${snippet.slice(0, 140)}`;
 
-        // 7. Upsert Thread in Prisma
+        // 7. Upsert Thread in Prisma (preserving Gemini analysis if already analyzed)
+        const existingThread = await prisma.thread.findUnique({
+          where: {
+            accountId_gmailThreadId: {
+              accountId: gmailAccount.id,
+              gmailThreadId: rawThread.id,
+            },
+          },
+          select: { id: true, analyzedAt: true },
+        });
+
         const dbThread = await prisma.thread.upsert({
           where: {
             accountId_gmailThreadId: {
@@ -233,10 +244,15 @@ export async function syncUserGmailInbox(userId: string): Promise<{
             isSnoozed,
             lastMessageAt,
             internalDate: new Date(firstMsg.internalDate ? parseInt(firstMsg.internalDate, 10) : Date.now()),
-            priority,
-            category,
-            executiveBrief,
-            aiSummary: snippet,
+            // Only update heuristic priority/brief if thread has NOT been analyzed by Gemini
+            ...(existingThread?.analyzedAt
+              ? {}
+              : {
+                  priority,
+                  category,
+                  executiveBrief,
+                  aiSummary: snippet,
+                }),
           },
           create: {
             accountId: gmailAccount.id,
@@ -363,6 +379,14 @@ export async function syncUserGmailInbox(userId: string): Promise<{
     });
 
     console.log(`[Gmail Sync] Successfully synced ${threadsSyncedCount} threads for user ${userId}.`);
+
+    // 10. Automatically pass unanalyzed threads through the Gemini analysis pipeline in background
+    if (process.env.GEMINI_API_KEY) {
+      AIService.analyzeUnanalyzedThreadsForAccount(gmailAccount.id, 8).catch((aiErr) => {
+        console.error(`[Gmail Sync -> Gemini Analysis] Background analysis error:`, aiErr);
+      });
+    }
+
     return { success: true, totalSynced: threadsSyncedCount };
   } catch (error) {
     console.error("[Gmail Sync] Critical error in syncUserGmailInbox:", error);
