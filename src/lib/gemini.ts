@@ -6,7 +6,6 @@ import { GeminiEmailAnalysis, ToneModifier, KeyInformationData } from "@/types/a
  * Strictly server-side: GEMINI_API_KEY is never exposed to the client/browser.
  */
 const GEMINI_MODEL = "gemini-3.6-flash";
-const FALLBACK_MODEL = "gemini-2.5-pro";
 
 function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -38,7 +37,7 @@ export async function testGeminiConnection(): Promise<{ success: boolean; model:
     const ai = getGeminiClient();
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
-      contents: "Respond with a simple JSON object: {\"status\": \"ok\", \"service\": \"Gemini\", \"model\": \"gemini-2.5-flash\"}",
+      contents: "Respond with a simple JSON object: {\"status\": \"ok\", \"service\": \"Gemini\"}",
       config: {
         responseMimeType: "application/json",
       },
@@ -51,31 +50,12 @@ export async function testGeminiConnection(): Promise<{ success: boolean; model:
     };
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("[Gemini Service] Connection test failed with primary model:", errorMsg);
-    // Try fallback model
-    try {
-      const ai = getGeminiClient();
-      const response = await ai.models.generateContent({
-        model: FALLBACK_MODEL,
-        contents: "Respond with a simple JSON object: {\"status\": \"ok\", \"service\": \"Gemini\", \"model\": \"gemini-2.0-flash\"}",
-        config: {
-          responseMimeType: "application/json",
-        },
-      });
-      return {
-        success: true,
-        model: FALLBACK_MODEL,
-        message: response.text || "Connected successfully with fallback model",
-      };
-    } catch (fallbackError: unknown) {
-      const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-      console.error("[Gemini Service] Connection test failed with fallback model:", fallbackMsg);
-      return {
-        success: false,
-        model: GEMINI_MODEL,
-        message: errorMsg || "Gemini API connection failed",
-      };
-    }
+    console.error("[Gemini Service] Connection test failed:", errorMsg);
+    return {
+      success: false,
+      model: GEMINI_MODEL,
+      message: errorMsg || "Gemini API connection failed",
+    };
   }
 }
 
@@ -153,8 +133,8 @@ Produce the structured JSON analysis.`;
     rawText = await runModel(GEMINI_MODEL);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[Gemini Service] Primary model (${GEMINI_MODEL}) error, falling back to ${FALLBACK_MODEL}:`, msg);
-    rawText = await runModel(FALLBACK_MODEL);
+    console.error(`[Gemini Service] Model (${GEMINI_MODEL}) generation failed:`, msg);
+    throw new Error(`[Gemini Service] Analysis failed: ${msg}`);
   }
 
   if (!rawText) {

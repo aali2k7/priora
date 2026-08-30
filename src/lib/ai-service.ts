@@ -13,7 +13,6 @@ import {
   analyzeEmailThreadWithGemini,
   generateDraftWithGemini,
 } from "@/lib/gemini";
-import { MOCK_AI_SUMMARIES, MOCK_AI_DRAFTS, MOCK_EXECUTIVE_BRIEFING } from "./mock-data";
 
 interface DbThreadWithEmails {
   id: string;
@@ -56,38 +55,60 @@ interface DbThreadWithEmails {
 
 /**
  * Server-side AI Service Layer for Priora.
- * Seamlessly interfaces with PostgreSQL/Neon and Google Gemini API.
+ * Strictly server-side: Interfaces with PostgreSQL/Neon and Google Gemini API.
+ * Never uses mock AI data in production behavior.
  */
 export class AIService {
   /**
-   * Generates or fetches the executive briefing digest based on real database threads.
+   * Generates executive briefing digest strictly based on real database threads.
    */
   static async getExecutiveBriefing(userId?: string): Promise<ExecutiveBriefing> {
     try {
       const whereClause = userId
-        ? { account: { userId } }
-        : {};
+        ? { account: { userId }, isArchived: false }
+        : { isArchived: false };
 
       const threads = await prisma.thread.findMany({
         where: whereClause,
         orderBy: { lastMessageAt: "desc" },
-        take: 100,
+      });
+
+      const today = new Date().toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
       });
 
       if (threads.length === 0) {
-        return MOCK_EXECUTIVE_BRIEFING;
+        return {
+          date: today,
+          digestSummary: "No active threads found in local 15-day working dataset. Syncing inbox...",
+          urgentItemCount: 0,
+          waitingOnCount: 0,
+          topActionItems: [],
+        };
       }
 
+      // Real urgent threads derived from real persisted AI results or unread urgent signals
       const urgentThreads = threads.filter(
-        (t) => t.priority === "urgent" || t.category === "action_required"
+        (t) =>
+          t.priority === "urgent" ||
+          t.category === "action_required" ||
+          t.category === "deadline_today" ||
+          (t.urgencyScore !== null && t.urgencyScore >= 75) ||
+          t.actionRequired === true
       );
-      const unreadCount = threads.filter((t) => t.isUnread).length;
 
+      const unreadCount = threads.filter((t) => t.isUnread).length;
       const topActionItems: ExtractedTask[] = [];
 
       for (const t of urgentThreads.slice(0, 5)) {
-        const keyInfo = (typeof t.keyInformation === "object" && t.keyInformation !== null ? t.keyInformation : {}) as Record<string, unknown>;
-        const recAction = (typeof t.recommendedAction === "object" && t.recommendedAction !== null ? t.recommendedAction : {}) as Record<string, unknown>;
+        const keyInfo = (typeof t.keyInformation === "object" && t.keyInformation !== null
+          ? t.keyInformation
+          : {}) as Record<string, unknown>;
+        const recAction = (typeof t.recommendedAction === "object" && t.recommendedAction !== null
+          ? t.recommendedAction
+          : {}) as Record<string, unknown>;
 
         const title =
           (typeof recAction.actionTitle === "string" ? recAction.actionTitle : null) ||
@@ -106,16 +127,10 @@ export class AIService {
         });
       }
 
-      const today = new Date().toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-
       const digestSummary =
         urgentThreads.length > 0
-          ? `${urgentThreads.length} critical priority thread${urgentThreads.length > 1 ? "s" : ""} require your executive attention today across ${threads.length} synced conversations.`
-          : `All inboxes are up to date. ${threads.length} conversations synchronized with zero critical blockers.`;
+          ? `${urgentThreads.length} high-priority thread${urgentThreads.length > 1 ? "s" : ""} require attention across ${threads.length} active conversations.`
+          : `All inboxes are clear. ${threads.length} active conversations in 15-day dataset with zero critical blockers.`;
 
       return {
         date: today,
@@ -126,12 +141,23 @@ export class AIService {
       };
     } catch (error: unknown) {
       console.error("[AIService.getExecutiveBriefing] Error deriving briefing:", error);
-      return MOCK_EXECUTIVE_BRIEFING;
+      const today = new Date().toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+      return {
+        date: today,
+        digestSummary: "Executive briefing is currently being generated...",
+        urgentItemCount: 0,
+        waitingOnCount: 0,
+        topActionItems: [],
+      };
     }
   }
 
   /**
-   * Analyzes an email thread with Gemini, persisting the structured results in PostgreSQL.
+   * Analyzes an email thread with Gemini and persists the structured results in PostgreSQL.
    */
   static async analyzeThreadWithGemini(
     threadId: string,
@@ -149,10 +175,7 @@ export class AIService {
     });
 
     if (!thread) {
-      if (MOCK_AI_SUMMARIES[threadId]) {
-        return MOCK_AI_SUMMARIES[threadId];
-      }
-      throw new Error(`[AIService] Thread not found: ${threadId}`);
+      throw new Error(`[AIService] Thread not found in database: ${threadId}`);
     }
 
     // 2. Return cached analysis if already analyzed and not forced
@@ -164,7 +187,7 @@ export class AIService {
     const messages = thread.emails.map((e) => ({
       sender: e.fromName ? `${e.fromName} <${e.fromEmail}>` : e.fromEmail,
       recipient: e.toName ? `${e.toName} <${e.toEmail}>` : (e.toEmail || ""),
-      timestamp: e.internalDate ? new Date(e.internalDate).toLocaleString() : "Unknown date",
+      timestamp: e.internalDate ? new Date(e.internalDate).toLocaleString() : "Recent",
       snippet: e.snippet || "",
       bodyText: e.bodyText || e.snippet || "",
     }));
@@ -180,14 +203,14 @@ export class AIService {
     }
 
     // 4. Call Gemini API
-    console.log(`[AIService] Analyzing thread ${thread.id} ("${thread.subject}") with Gemini...`);
+    console.log(`[AIService] Running Gemini analysis for thread ${thread.id} ("${thread.subject}")...`);
     const analysis = await analyzeEmailThreadWithGemini({
       subject: thread.subject || "(No Subject)",
       messages,
       accountEmail: thread.account?.email,
     });
 
-    // 5. Persist Gemini analysis into PostgreSQL via Prisma
+    // 5. Persist validated Gemini analysis into PostgreSQL via Prisma
     const updatedThread = await prisma.thread.update({
       where: { id: thread.id },
       data: {
@@ -220,7 +243,8 @@ export class AIService {
   }
 
   /**
-   * Retrieves the AI summary for a thread. Analyzes on-the-fly with Gemini if unanalyzed.
+   * Retrieves the AI summary for a thread from the database.
+   * If not yet analyzed, attempts Gemini analysis on-the-fly.
    */
   static async getThreadSummary(threadId: string): Promise<AISummary> {
     try {
@@ -234,13 +258,10 @@ export class AIService {
       });
 
       if (!thread) {
-        if (MOCK_AI_SUMMARIES[threadId]) {
-          return MOCK_AI_SUMMARIES[threadId];
-        }
         return {
           threadId,
-          executiveBrief: "Analysis pending",
-          bulletPoints: ["Thread details are being indexed."],
+          executiveBrief: "Analysis unavailable",
+          bulletPoints: ["Thread record not found."],
         };
       }
 
@@ -254,17 +275,22 @@ export class AIService {
         try {
           return await this.analyzeThreadWithGemini(thread.id);
         } catch (geminiError) {
-          console.error(`[AIService] Gemini analysis failed for thread ${thread.id}:`, geminiError);
+          console.error(`[AIService] On-demand Gemini analysis failed for thread ${thread.id}:`, geminiError);
+          return {
+            threadId: thread.id,
+            executiveBrief: "Analysis unavailable",
+            bulletPoints: ["Gemini analysis failed to process this thread."],
+          };
         }
       }
 
-      // Fallback summary from DB thread fields without fake urgency scores
-      return this.formatThreadToAISummary(thread as DbThreadWithEmails);
+      return {
+        threadId: thread.id,
+        executiveBrief: "Analysis pending",
+        bulletPoints: ["AI analysis is pending for this thread."],
+      };
     } catch (error: unknown) {
       console.error(`[AIService.getThreadSummary] Error for thread ${threadId}:`, error);
-      if (MOCK_AI_SUMMARIES[threadId]) {
-        return MOCK_AI_SUMMARIES[threadId];
-      }
       return {
         threadId,
         executiveBrief: "Analysis unavailable",
@@ -278,7 +304,8 @@ export class AIService {
    */
   static async getDraftResponse(
     threadId: string,
-    tone: ToneModifier = "concise"
+    tone: ToneModifier = "concise",
+    customInstructions?: string
   ): Promise<AIDraftResponse> {
     try {
       const thread = await prisma.thread.findFirst({
@@ -290,18 +317,28 @@ export class AIService {
         },
       });
 
-      if (thread?.suggestedReply && tone === "concise") {
+      if (!thread) {
+        return {
+          threadId,
+          intentStrategy: "Draft unavailable",
+          draftText: "Thread not found.",
+          suggestedTone: tone,
+          lastUpdated: "Just now",
+        };
+      }
+
+      if (thread.suggestedReply && tone === "concise" && !customInstructions) {
         return {
           threadId: thread.id,
-          intentStrategy: "Strategy: Formulated from Gemini thread analysis.",
+          intentStrategy: "Strategy: Formulated from persisted Gemini thread analysis.",
           draftText: thread.suggestedReply,
           suggestedTone: "concise",
           lastUpdated: thread.analyzedAt ? "Analyzed recently" : "Just now",
         };
       }
 
-      // If tone is changed and Gemini API key is available, generate dynamic response
-      if (thread && thread.emails.length > 0 && process.env.GEMINI_API_KEY) {
+      // If Gemini API is available and thread has messages, generate dynamic response
+      if (process.env.GEMINI_API_KEY && (thread.emails.length > 0 || thread.snippet)) {
         try {
           const messages = thread.emails.map((e) => ({
             sender: e.fromName || e.fromEmail,
@@ -311,10 +348,21 @@ export class AIService {
             bodyText: e.bodyText || e.snippet || "",
           }));
 
+          if (messages.length === 0 && thread.snippet) {
+            messages.push({
+              sender: "Sender",
+              recipient: "Me",
+              timestamp: "Recent",
+              snippet: thread.snippet,
+              bodyText: thread.snippet,
+            });
+          }
+
           const draft = await generateDraftWithGemini(
             thread.subject || "(No Subject)",
             messages,
-            tone
+            tone,
+            customInstructions
           );
 
           return {
@@ -325,35 +373,15 @@ export class AIService {
             lastUpdated: "Just now",
           };
         } catch (geminiError) {
-          console.warn(`[AIService] Gemini draft generation failed for tone ${tone}, using transform fallback:`, geminiError);
+          console.warn(`[AIService] Gemini draft generation failed for tone ${tone}:`, geminiError);
         }
       }
 
-      // If base draft exists in thread
-      if (thread?.suggestedReply) {
-        return this.transformTone(
-          {
-            threadId: thread.id,
-            intentStrategy: "Strategy: Adjusted tone.",
-            draftText: thread.suggestedReply,
-            suggestedTone: "concise",
-            lastUpdated: "Just now",
-          },
-          tone
-        );
-      }
-
-      // Mock data fallback
-      const baseDraft = MOCK_AI_DRAFTS[threadId];
-      if (baseDraft) {
-        if (tone === baseDraft.suggestedTone) return baseDraft;
-        return this.transformTone(baseDraft, tone);
-      }
-
+      const defaultText = thread.suggestedReply || "Thank you for your email. I have received your message and will follow up shortly.";
       return {
-        threadId,
+        threadId: thread.id,
         intentStrategy: `Strategy: Responding in ${tone} tone.`,
-        draftText: "Hi,\n\nThank you for the update. I have reviewed this and will follow up shortly.\n\nBest,\nAlex Mercer",
+        draftText: defaultText,
         suggestedTone: tone,
         lastUpdated: "Just now",
       };
@@ -362,7 +390,7 @@ export class AIService {
       return {
         threadId,
         intentStrategy: `Strategy: Standard response in ${tone} tone.`,
-        draftText: "Hi,\n\nThank you for reaching out. I have received your email.\n\nBest regards,",
+        draftText: "Thank you for reaching out. I have received your message and will follow up shortly.",
         suggestedTone: tone,
         lastUpdated: "Just now",
       };
@@ -370,8 +398,8 @@ export class AIService {
   }
 
   /**
-   * Safely batch analyzes unanalyzed threads for a Gmail account.
-   * Runs sequentially with delay to stay comfortably within free-tier limits.
+   * Safely batch analyzes unanalyzed threads for a Gmail account in the background.
+   * Runs sequentially with delay to stay comfortably within rate limits.
    */
   static async analyzeUnanalyzedThreadsForAccount(
     accountId: string,
@@ -391,6 +419,10 @@ export class AIService {
       take: limit,
       select: { id: true, subject: true },
     });
+
+    if (unanalyzed.length === 0) {
+      return { processed: 0, errors: 0 };
+    }
 
     console.log(`[AIService] Found ${unanalyzed.length} unanalyzed threads for account ${accountId}.`);
     let processed = 0;
@@ -416,7 +448,7 @@ export class AIService {
    */
   private static formatThreadToAISummary(thread: DbThreadWithEmails): AISummary {
     const rawInsights = Array.isArray(thread.aiInsights)
-      ? (thread.aiInsights.filter((i): i is string => typeof i === "string"))
+      ? thread.aiInsights.filter((i): i is string => typeof i === "string")
       : [];
 
     const bulletPoints =
@@ -440,9 +472,15 @@ export class AIService {
       importanceScore: thread.importanceScore ?? undefined,
       actionRequired: thread.actionRequired ?? undefined,
       readingTimeSaved,
-      keyInformation: (typeof thread.keyInformation === "object" && thread.keyInformation !== null ? (thread.keyInformation as unknown as KeyInformationData) : undefined),
+      keyInformation:
+        typeof thread.keyInformation === "object" && thread.keyInformation !== null
+          ? (thread.keyInformation as unknown as KeyInformationData)
+          : undefined,
       aiInsights: rawInsights.length > 0 ? rawInsights : undefined,
-      recommendedAction: (typeof thread.recommendedAction === "object" && thread.recommendedAction !== null ? (thread.recommendedAction as unknown as RecommendedActionData) : undefined),
+      recommendedAction:
+        typeof thread.recommendedAction === "object" && thread.recommendedAction !== null
+          ? (thread.recommendedAction as unknown as RecommendedActionData)
+          : undefined,
       suggestedReply: thread.suggestedReply || undefined,
       analyzedAt: thread.analyzedAt ? new Date(thread.analyzedAt).toISOString() : undefined,
     };
@@ -460,42 +498,5 @@ export class AIService {
     const readSeconds = Math.max(15, Math.round((totalWords / 200) * 60));
     const briefSeconds = 6;
     return `Original read: ${readSeconds}s • AI brief: ${briefSeconds}s`;
-  }
-
-  /**
-   * Transforms draft tone dynamically.
-   */
-  private static transformTone(base: AIDraftResponse, tone: ToneModifier): AIDraftResponse {
-    let transformedText = base.draftText;
-    let strategy = base.intentStrategy;
-
-    if (tone === "concise") {
-      transformedText = transformedText
-        .split("\n\n")
-        .filter((line) => !line.startsWith("I hope") && !line.startsWith("I am writing"))
-        .join("\n\n");
-      strategy = "Strategy: Shortened to essential executive points.";
-    } else if (tone === "formal") {
-      transformedText = transformedText
-        .replace(/thanks/gi, "Thank you")
-        .replace(/looks good/gi, "I have reviewed and approve the proposed details");
-      strategy = "Strategy: Elevated formal corporate tone.";
-    } else if (tone === "direct_refusal") {
-      transformedText =
-        "Hi,\n\nThank you for reaching out. Unfortunately, we are unable to approve or proceed with this request at this time.\n\nBest regards,\nAlex Mercer";
-      strategy = "Strategy: Direct and polite refusal.";
-    } else if (tone === "request_call") {
-      transformedText =
-        "Hi,\n\nThanks for the update. Let's schedule a brief 10-minute call to align on this before proceeding.\n\nBest regards,\nAlex Mercer";
-      strategy = "Strategy: Proposing a brief call to align.";
-    }
-
-    return {
-      ...base,
-      draftText: transformedText,
-      suggestedTone: tone,
-      intentStrategy: strategy,
-      lastUpdated: "Just now",
-    };
   }
 }

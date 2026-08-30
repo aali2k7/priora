@@ -42,20 +42,28 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           }
         }
       } catch (err) {
-        console.warn("[ThreadReader] Failed to fetch summary from API, using fallback:", err);
+        console.warn("[ThreadReader] Failed to fetch summary from API, using local thread state:", err);
       }
 
-      // Fallback from thread properties
       if (!ignore) {
-        setSummary({
-          threadId: thread.id,
-          executiveBrief: thread.analyzedAt ? (thread.executiveBrief || thread.aiSummary || thread.snippet || "Review required.") : (thread.snippet || "Review conversation details below."),
-          bulletPoints: [thread.snippet || "Conversation details available in history."],
-          urgencyScore: thread.urgencyScore ?? undefined,
-          importanceScore: thread.importanceScore ?? undefined,
-          actionRequired: thread.actionRequired ?? undefined,
-          analyzedAt: thread.analyzedAt,
-        });
+        if (thread.analyzedAt) {
+          setSummary({
+            threadId: thread.id,
+            executiveBrief: thread.executiveBrief || thread.aiSummary || "AI Analysis completed.",
+            bulletPoints: [thread.snippet || "Conversation details available in history."],
+            urgencyScore: thread.urgencyScore ?? undefined,
+            importanceScore: thread.importanceScore ?? undefined,
+            actionRequired: thread.actionRequired ?? undefined,
+            analyzedAt: thread.analyzedAt,
+          });
+        } else {
+          setSummary({
+            threadId: thread.id,
+            executiveBrief: "Analysis pending",
+            bulletPoints: ["This thread is in queue for Gemini AI executive analysis."],
+            analyzedAt: undefined,
+          });
+        }
       }
     }
 
@@ -121,7 +129,8 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           <div className="flex items-center space-x-2">
             <h1 className="text-lg font-bold text-[var(--text-primary)]">{thread.subject}</h1>
             {thread.priority === "urgent" && <Badge variant="urgent">Urgent</Badge>}
-            {thread.category === "vip" && <Badge variant="vip">Student VIP</Badge>}
+            {thread.category === "vip" && <Badge variant="vip">VIP</Badge>}
+            {thread.actionRequired && <Badge variant="default">Action Required</Badge>}
           </div>
           <p className="text-[11px] text-[var(--text-muted)]">
             {thread.messages.length} message{thread.messages.length > 1 ? "s" : ""} in thread
@@ -174,7 +183,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
       {isSentSuccess && (
         <div className="flex items-center space-x-2.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-300 dark:border-emerald-500/30 p-4 text-xs text-emerald-800 dark:text-emerald-300 shadow-2xs">
           <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="font-medium">Outing Approval Email Dispatched to Student & Parents! Thread Archived.</span>
+          <span className="font-medium">Reply dispatched successfully! Thread archived.</span>
         </div>
       )}
 
@@ -233,7 +242,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
                     {msg.ccRecipients && msg.ccRecipients.length > 0 && (
                       <div className="flex items-center space-x-1 text-[11px] text-emerald-700 dark:text-emerald-400/90 mt-0.5 font-medium">
                         <Users className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>CC&apos;d Parents: {msg.ccRecipients.map((c) => c.name).join(", ")}</span>
+                        <span>CC&apos;d: {msg.ccRecipients.map((c) => c.name).join(", ")}</span>
                       </div>
                     )}
                   </div>

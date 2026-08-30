@@ -57,34 +57,48 @@ export async function getRetentionSummary(accountId: string, retentionDays: numb
 }
 
 /**
- * Cleans expired local PostgreSQL threads older than the retention threshold.
+ * Cleans expired local PostgreSQL data older than the retention threshold.
  * 
  * Safety invariants:
  * 1. Gmail is NEVER touched or modified (permanent mailbox).
  * 2. User, Account, Session, Verification, GmailAccount records are NEVER touched.
- * 3. Only local PostgreSQL Thread records older than cutoffDate are deleted.
- * 4. Child Email and LabelOnThread records are automatically deleted via PostgreSQL CASCADE.
+ * 3. Expired individual Email records older than cutoffDate are deleted.
+ * 4. Only Thread records with NO remaining retained emails (or lastMessageAt < cutoff) are deleted.
+ * 5. Threads containing at least one retained recent message are preserved.
  */
 export async function cleanupExpiredLocalData(
   accountId: string,
   retentionDays: number = DEFAULT_RETENTION_DAYS
-): Promise<{ deletedThreads: number }> {
+): Promise<{ deletedEmails: number; deletedThreads: number }> {
   const cutoff = getRetentionCutoffDate(retentionDays);
 
-  const deleteResult = await prisma.thread.deleteMany({
+  // 1. Delete individual emails older than the cutoff date
+  const deletedEmailsResult = await prisma.email.deleteMany({
     where: {
       accountId,
-      lastMessageAt: { lt: cutoff },
+      internalDate: { lt: cutoff },
     },
   });
 
-  if (deleteResult.count > 0) {
+  // 2. Delete threads that have no remaining emails or whose latest message is older than cutoff
+  const deletedThreadsResult = await prisma.thread.deleteMany({
+    where: {
+      accountId,
+      OR: [
+        { emails: { none: {} } },
+        { lastMessageAt: { lt: cutoff } },
+      ],
+    },
+  });
+
+  if (deletedEmailsResult.count > 0 || deletedThreadsResult.count > 0) {
     console.log(
-      `[Retention] Cleaned ${deleteResult.count} local PostgreSQL threads older than ${retentionDays} days (cutoff: ${cutoff.toISOString()})`
+      `[Retention] Cleaned ${deletedEmailsResult.count} expired emails and ${deletedThreadsResult.count} expired threads older than ${retentionDays} days (cutoff: ${cutoff.toISOString()})`
     );
   }
 
   return {
-    deletedThreads: deleteResult.count,
+    deletedEmails: deletedEmailsResult.count,
+    deletedThreads: deletedThreadsResult.count,
   };
 }

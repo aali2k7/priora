@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { AIService } from "@/lib/ai-service";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
   try {
@@ -20,7 +21,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "threadId query parameter is required" }, { status: 400 });
     }
 
-    const summary = await AIService.getThreadSummary(threadId);
+    // Verify thread ownership
+    const thread = await prisma.thread.findFirst({
+      where: {
+        OR: [{ id: threadId }, { gmailThreadId: threadId }],
+        account: {
+          userId: session.user.id,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!thread) {
+      return NextResponse.json({ error: "Thread not found or unauthorized" }, { status: 404 });
+    }
+
+    const summary = await AIService.getThreadSummary(thread.id);
     return NextResponse.json({ summary });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to get thread summary";

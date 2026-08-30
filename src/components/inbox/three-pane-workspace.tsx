@@ -2,7 +2,7 @@
 
 import React from "react";
 import { EmailThread } from "@/types/email";
-import { ThreadFeedList } from "./thread-feed-list";
+import { ThreadFeedList, ViewMode, FocusedSubFilter, InboxSubFilter } from "./thread-feed-list";
 import { ThreadReader } from "./thread-reader";
 import { Inbox, ArrowLeft, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,9 @@ export function ThreePaneWorkspace({
   const [threads, setThreads] = React.useState<EmailThread[]>(initialThreads);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSyncing, setIsSyncing] = React.useState(false);
-  const [activeFilter, setActiveFilter] = React.useState<"all" | "urgent" | "action_needed" | "vip" | "archived">("all");
+  const [viewMode, setViewMode] = React.useState<ViewMode>("inbox");
+  const [inboxFilter, setInboxFilter] = React.useState<InboxSubFilter>("all");
+  const [focusedFilter, setFocusedFilter] = React.useState<FocusedSubFilter>("all");
   const [activeThreadId, setActiveThreadId] = React.useState<string>(initialThreadId || "");
   const [isMobileViewThread, setIsMobileViewThread] = React.useState(!!initialThreadId);
 
@@ -82,28 +84,59 @@ export function ThreePaneWorkspace({
     };
   }, [isSyncing]);
 
-  const filteredThreads = threads.filter((t) => {
-    if (activeFilter === "urgent") return t.priority === "urgent";
-    if (activeFilter === "action_needed") return t.category === "action_required";
-    if (activeFilter === "vip") return t.category === "vip";
-    if (activeFilter === "archived") return t.isArchived;
-    return !t.isArchived;
-  });
+  // Compute Focused qualification from REAL persisted AI analysis
+  const isThreadFocused = (t: EmailThread): boolean => {
+    if (t.isArchived) return false;
+    if (!t.analyzedAt) return false;
+
+    const hasHighUrgency = typeof t.urgencyScore === "number" && t.urgencyScore >= 60;
+    const hasHighImportance = typeof t.importanceScore === "number" && t.importanceScore >= 60;
+    const isUrgentPriority = t.priority === "urgent" || t.priority === "high";
+    const isActionCategory = t.category === "action_required" || t.category === "deadline_today" || t.category === "vip";
+    const hasActionRequired = t.actionRequired === true;
+
+    return hasHighUrgency || hasHighImportance || isUrgentPriority || isActionCategory || hasActionRequired;
+  };
+
+  // Filter threads based on active viewMode and subFilters
+  const filteredThreads = React.useMemo(() => {
+    if (viewMode === "archived") {
+      return threads.filter((t) => t.isArchived);
+    }
+
+    if (viewMode === "focused") {
+      const focusedThreads = threads.filter(isThreadFocused);
+      if (focusedFilter === "urgent") {
+        return focusedThreads.filter((t) => t.priority === "urgent" || (typeof t.urgencyScore === "number" && t.urgencyScore >= 75));
+      }
+      if (focusedFilter === "action_needed") {
+        return focusedThreads.filter((t) => t.actionRequired === true || t.category === "action_required");
+      }
+      if (focusedFilter === "vip") {
+        return focusedThreads.filter((t) => t.category === "vip" || t.participants.some((p) => p.isVIP));
+      }
+      return focusedThreads;
+    }
+
+    // Default: Inbox (all non-archived threads within 15-day dataset)
+    const inboxThreads = threads.filter((t) => !t.isArchived);
+    if (inboxFilter === "unread") {
+      return inboxThreads.filter((t) => t.isUnread);
+    }
+    return inboxThreads;
+  }, [threads, viewMode, inboxFilter, focusedFilter]);
 
   const activeThread = filteredThreads.find((t) => t.id === activeThreadId) || filteredThreads[0];
 
-  const handleFilterChange = (filterStr: string) => {
-    const validFilter = filterStr as "all" | "urgent" | "action_needed" | "vip" | "archived";
-    setActiveFilter(validFilter);
-    const updatedFiltered = threads.filter((t) => {
-      if (validFilter === "urgent") return t.priority === "urgent";
-      if (validFilter === "action_needed") return t.category === "action_required";
-      if (validFilter === "vip") return t.category === "vip";
-      if (validFilter === "archived") return t.isArchived;
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    const targetThreads = threads.filter((t) => {
+      if (mode === "archived") return t.isArchived;
+      if (mode === "focused") return isThreadFocused(t);
       return !t.isArchived;
     });
-    if (updatedFiltered.length > 0) {
-      setActiveThreadId(updatedFiltered[0].id);
+    if (targetThreads.length > 0) {
+      setActiveThreadId(targetThreads[0].id);
     }
   };
 
@@ -163,10 +196,10 @@ export function ThreePaneWorkspace({
           </div>
           <div className="space-y-1">
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              Syncing Your Live Gmail Inbox
+              Syncing Live Gmail Inbox
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Fetching up to 100 recent threads and populating PostgreSQL database cache...
+              Synchronizing 15-day rolling working dataset into local PostgreSQL cache...
             </p>
           </div>
           <div className="flex items-center space-x-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
@@ -188,10 +221,17 @@ export function ThreePaneWorkspace({
       >
         <ThreadFeedList
           threads={filteredThreads}
+          totalInboxCount={threads.filter((t) => !t.isArchived).length}
+          totalFocusedCount={threads.filter(isThreadFocused).length}
+          totalArchivedCount={threads.filter((t) => t.isArchived).length}
           activeThreadId={activeThread?.id}
           onSelectThread={handleSelectThread}
-          activeFilter={activeFilter}
-          onFilterChange={handleFilterChange}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+          inboxFilter={inboxFilter}
+          onInboxFilterChange={setInboxFilter}
+          focusedFilter={focusedFilter}
+          onFocusedFilterChange={setFocusedFilter}
         />
       </div>
 

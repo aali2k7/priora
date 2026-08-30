@@ -2,8 +2,8 @@ import React from "react";
 import { ThreePaneWorkspace } from "@/components/inbox/three-pane-workspace";
 
 export const metadata = {
-  title: "Priority Inbox — Priora",
-  description: "Executive 3-Pane Triage Workstation",
+  title: "Inbox & Focused — Priora",
+  description: "Executive Email Intelligence & Triage Workspace",
 };
 
 interface InboxPageProps {

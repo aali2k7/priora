@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncUserGmailInbox } from "@/lib/gmail-sync";
 import { EmailThread, PriorityLevel, CategoryTag } from "@/types/email";
+import { getRetentionCutoffDate } from "@/lib/retention";
 
 export async function GET() {
   try {
@@ -36,11 +37,17 @@ export async function GET() {
       });
     }
 
-    // Fetch threads from Neon PostgreSQL
+    // Fetch rolling 15-day threads from Neon PostgreSQL without arbitrary cap
+    const cutoffDate = getRetentionCutoffDate(15);
     const dbThreads = await prisma.thread.findMany({
-      where: { accountId: account.id },
+      where: {
+        accountId: account.id,
+        OR: [
+          { lastMessageAt: { gte: cutoffDate } },
+          { lastMessageAt: null },
+        ],
+      },
       orderBy: { lastMessageAt: "desc" },
-      take: 100,
       include: {
         emails: {
           orderBy: { internalDate: "asc" },
@@ -78,7 +85,9 @@ export async function GET() {
         subject: e.subject || t.subject || "(No Subject)",
         bodySnippet: e.snippet || "",
         bodyText: e.bodyText || e.snippet || "",
-        timestamp: e.internalDate ? new Date(e.internalDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Recently",
+        timestamp: e.internalDate
+          ? new Date(e.internalDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : "Recently",
         isUnread: e.isUnread,
       }));
 

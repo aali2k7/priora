@@ -111,7 +111,7 @@ export async function syncUserGmailInbox(userId: string): Promise<{
 
     const userEmail = dbUser.email || "user@gmail.com";
 
-    // 3. Upsert GmailAccount in Neon PostgreSQL
+    // 2. Upsert GmailAccount in Neon PostgreSQL
     const gmailAccount = await prisma.gmailAccount.upsert({
       where: {
         userId_email: {
@@ -127,7 +127,7 @@ export async function syncUserGmailInbox(userId: string): Promise<{
       },
     });
 
-    // 4. Upsert SyncState -> status: "syncing"
+    // 3. Upsert SyncState -> status: "syncing"
     const syncState = await prisma.syncState.upsert({
       where: { accountId: gmailAccount.id },
       update: { status: "syncing", errorMessage: null },
@@ -140,28 +140,56 @@ export async function syncUserGmailInbox(userId: string): Promise<{
 
     console.log(`[Gmail Sync] Starting sync for account ${gmailAccount.email} (SyncState: ${syncState.id})...`);
 
-    // 5. Fetch newest threads from Gmail REST API within 15-day retention window
+    // 4. Fetch all threads within the rolling 15-day window using pagination (nextPageToken)
     const fifteenDaysAgoSeconds = Math.floor((Date.now() - 15 * 24 * 60 * 60 * 1000) / 1000);
     const gmailQuery = `after:${fifteenDaysAgoSeconds}`;
-    const threadsListRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=100&q=${encodeURIComponent(gmailQuery)}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    const allThreadItems: { id: string }[] = [];
+    let pageToken: string | undefined = undefined;
+    let lastHistoryId: string | null = null;
+    let pageCount = 0;
+    const MAX_PAGES = 10; // Safety boundary per sync batch
 
-    if (!threadsListRes.ok) {
-      const errText = await threadsListRes.text();
-      console.error(`[Gmail Sync] Gmail API thread list error: ${threadsListRes.status} ${errText}`);
-      await prisma.syncState.update({
-        where: { id: syncState.id },
-        data: { status: "error", errorMessage: `Gmail API error ${threadsListRes.status}` },
+    do {
+      pageCount++;
+      const queryParams = new URLSearchParams({
+        maxResults: "100",
+        q: gmailQuery,
       });
-      return { success: false, totalSynced: 0, message: `Gmail API error ${threadsListRes.status}` };
-    }
+      if (pageToken) {
+        queryParams.set("pageToken", pageToken);
+      }
+      const fetchUrl = `https://gmail.googleapis.com/gmail/v1/users/me/threads?${queryParams.toString()}`;
 
-    const threadsListData = await threadsListRes.json();
-    const threadItems = (threadsListData.threads || []) as { id: string }[];
+      const threadsListRes = await fetch(fetchUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-    if (threadItems.length === 0) {
+      if (!threadsListRes.ok) {
+        const errText = await threadsListRes.text();
+        console.error(`[Gmail Sync] Gmail API thread list error on page ${pageCount}: ${threadsListRes.status} ${errText}`);
+        if (pageCount === 1) {
+          await prisma.syncState.update({
+            where: { id: syncState.id },
+            data: { status: "error", errorMessage: `Gmail API error ${threadsListRes.status}` },
+          });
+          return { success: false, totalSynced: 0, message: `Gmail API error ${threadsListRes.status}` };
+        }
+        break;
+      }
+
+      const threadsListData = await threadsListRes.json();
+      if (threadsListData.historyId) {
+        lastHistoryId = threadsListData.historyId;
+      }
+
+      const items = (threadsListData.threads || []) as { id: string }[];
+      allThreadItems.push(...items);
+      pageToken = threadsListData.nextPageToken;
+    } while (pageToken && pageCount < MAX_PAGES);
+
+    console.log(`[Gmail Sync] Retrieved ${allThreadItems.length} threads in 15-day window across ${pageCount} page(s).`);
+
+    if (allThreadItems.length === 0) {
       await prisma.syncState.update({
         where: { id: syncState.id },
         data: { status: "completed", lastSyncedAt: new Date(), totalThreadsSynced: 0 },
@@ -169,10 +197,10 @@ export async function syncUserGmailInbox(userId: string): Promise<{
       return { success: true, totalSynced: 0, message: "No threads found" };
     }
 
-    // 6. Process each thread and its messages
+    // 5. Process each thread and its messages
     let threadsSyncedCount = 0;
 
-    for (const item of threadItems) {
+    for (const item of allThreadItems) {
       try {
         const threadDetailRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/threads/${item.id}?format=full`,
@@ -195,7 +223,6 @@ export async function syncUserGmailInbox(userId: string): Promise<{
 
         const subject = getHeader(firstMsg, "Subject") || "(No Subject)";
         const firstFrom = getHeader(firstMsg, "From");
-        const { name: fromName, email: fromEmail } = parseEmailAddress(firstFrom);
         const snippet = firstMsg.snippet || "";
 
         const isUnread = messages.some((m) => m.labelIds?.includes("UNREAD"));
@@ -204,34 +231,9 @@ export async function syncUserGmailInbox(userId: string): Promise<{
 
         const internalTime = lastMsg.internalDate ? parseInt(lastMsg.internalDate, 10) : Date.now();
         const lastMessageAt = new Date(internalTime);
+        const firstInternalTime = firstMsg.internalDate ? parseInt(firstMsg.internalDate, 10) : Date.now();
 
-        // Priority heuristics
-        let priority = "normal";
-        if (isUnread && (subject.toLowerCase().includes("urgent") || subject.toLowerCase().includes("asap"))) {
-          priority = "urgent";
-        } else if (isUnread) {
-          priority = "high";
-        }
-
-        // Category heuristics
-        let category = "fyi";
-        if (priority === "urgent") category = "action_required";
-        else if (messages.some((m) => m.labelIds?.includes("STARRED"))) category = "vip";
-
-        // Executive brief heuristic synthesis
-        const executiveBrief = `${senderNameSummary(fromName, fromEmail)}: ${subject}. ${snippet.slice(0, 140)}`;
-
-        // 7. Upsert Thread in Prisma (preserving Gemini analysis if already analyzed)
-        const existingThread = await prisma.thread.findUnique({
-          where: {
-            accountId_gmailThreadId: {
-              accountId: gmailAccount.id,
-              gmailThreadId: rawThread.id,
-            },
-          },
-          select: { id: true, analyzedAt: true },
-        });
-
+        // 6. Upsert Thread in Prisma (preserving Gemini analysis if already analyzed)
         const dbThread = await prisma.thread.upsert({
           where: {
             accountId_gmailThreadId: {
@@ -246,16 +248,7 @@ export async function syncUserGmailInbox(userId: string): Promise<{
             isArchived,
             isSnoozed,
             lastMessageAt,
-            internalDate: new Date(firstMsg.internalDate ? parseInt(firstMsg.internalDate, 10) : Date.now()),
-            // Only update heuristic priority/brief if thread has NOT been analyzed by Gemini
-            ...(existingThread?.analyzedAt
-              ? {}
-              : {
-                  priority,
-                  category,
-                  executiveBrief,
-                  aiSummary: snippet,
-                }),
+            internalDate: new Date(firstInternalTime),
           },
           create: {
             accountId: gmailAccount.id,
@@ -266,15 +259,13 @@ export async function syncUserGmailInbox(userId: string): Promise<{
             isArchived,
             isSnoozed,
             lastMessageAt,
-            internalDate: new Date(firstMsg.internalDate ? parseInt(firstMsg.internalDate, 10) : Date.now()),
-            priority,
-            category,
-            executiveBrief,
-            aiSummary: snippet,
+            internalDate: new Date(firstInternalTime),
+            priority: "normal",
+            category: "fyi",
           },
         });
 
-        // 8. Upsert Labels and Emails for this thread
+        // 7. Upsert Labels and Emails for this thread
         for (const msg of messages) {
           const msgHeaders = msg.payload?.headers || [];
           const getMHeader = (n: string) =>
@@ -370,28 +361,28 @@ export async function syncUserGmailInbox(userId: string): Promise<{
       }
     }
 
-    // 9. Update SyncState -> status: "completed"
+    // 8. Update SyncState -> status: "completed"
     await prisma.syncState.update({
       where: { id: syncState.id },
       data: {
         status: "completed",
         lastSyncedAt: new Date(),
         totalThreadsSynced: threadsSyncedCount,
-        lastHistoryId: threadsListData.historyId || null,
+        lastHistoryId: lastHistoryId || null,
       },
     });
 
-    // 10. Run local rolling 15-day retention cleanup (strictly local DB only, Gmail remains untouched)
+    // 9. Run local rolling 15-day retention cleanup
     await cleanupExpiredLocalData(gmailAccount.id, 15).catch((retErr) => {
       console.error("[Gmail Sync] Retention cleanup warning:", retErr);
     });
 
     console.log(`[Gmail Sync] Successfully synced ${threadsSyncedCount} threads for user ${userId}.`);
 
-    // 11. Automatically pass unanalyzed threads through the Gemini analysis pipeline in background
+    // 10. Trigger background analysis for unanalyzed threads without blocking sync
     if (process.env.GEMINI_API_KEY) {
-      AIService.analyzeUnanalyzedThreadsForAccount(gmailAccount.id, 8).catch((aiErr) => {
-        console.error(`[Gmail Sync -> Gemini Analysis] Background analysis error:`, aiErr);
+      AIService.analyzeUnanalyzedThreadsForAccount(gmailAccount.id, 5).catch((aiErr) => {
+        console.error(`[Gmail Sync -> Gemini Analysis] Background analysis warning:`, aiErr);
       });
     }
 
@@ -400,10 +391,4 @@ export async function syncUserGmailInbox(userId: string): Promise<{
     console.error("[Gmail Sync] Critical error in syncUserGmailInbox:", error);
     return { success: false, totalSynced: 0, message: String(error) };
   }
-}
-
-function senderNameSummary(name: string, email: string): string {
-  if (name && name !== email) return name;
-  if (email.includes("@")) return email.split("@")[0];
-  return "Sender";
 }

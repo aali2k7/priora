@@ -32,7 +32,7 @@ export function SidebarNav({ urgentCount = 2 }: SidebarNavProps) {
       badge: null,
     },
     {
-      label: "Priority Inbox",
+      label: "Inbox",
       href: "/inbox",
       icon: Inbox,
       badge: urgentCount > 0 ? <Badge variant="urgent">{urgentCount}</Badge> : null,
@@ -138,7 +138,7 @@ export function SidebarNav({ urgentCount = 2 }: SidebarNavProps) {
               <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
               <div className="flex-1 overflow-hidden">
                 <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 truncate">AI Engine Active</p>
-                <p className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 truncate">Scaffolding Fallback Active</p>
+                <p className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 truncate">Gemini 3.6 Flash</p>
               </div>
             </div>
           </div>
