@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendGmailReply, modifyGmailThreadLabels } from "@/lib/gmail-service";
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { action, threadId, value } = body;
+    const { action, threadId, value, archiveAfterSend } = body;
 
     if (!threadId || !action) {
       return NextResponse.json(
@@ -39,6 +40,12 @@ export async function POST(request: Request) {
         where: { id: thread.id },
         data: { isArchived: true },
       });
+
+      // Synchronize label removal with live Gmail
+      modifyGmailThreadLabels(session.user.id, thread.gmailThreadId, [], ["INBOX"]).catch((e) =>
+        console.warn("[POST /api/gmail/action] Live Gmail archive label update warning:", e)
+      );
+
       return NextResponse.json({ success: true, message: "Thread archived" });
     }
 
@@ -55,17 +62,42 @@ export async function POST(request: Request) {
         where: { id: thread.id },
         data: { isUnread: false },
       });
+
+      // Synchronize label removal with live Gmail
+      modifyGmailThreadLabels(session.user.id, thread.gmailThreadId, [], ["UNREAD"]).catch((e) =>
+        console.warn("[POST /api/gmail/action] Live Gmail markRead label update warning:", e)
+      );
+
       return NextResponse.json({ success: true, message: "Marked as read" });
     }
 
     if (action === "reply") {
-      // In a full implementation, this dispatches via Gmail API send.
-      // Here, we update the thread state and mark archived.
-      await prisma.thread.update({
-        where: { id: thread.id },
-        data: { isArchived: true },
+      if (!value || typeof value !== "string" || !value.trim()) {
+        return NextResponse.json(
+          { error: "Reply text content cannot be empty" },
+          { status: 400 }
+        );
+      }
+
+      const result = await sendGmailReply(
+        session.user.id,
+        thread.id,
+        value.trim(),
+        archiveAfterSend !== false
+      );
+
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error || "Failed to send Gmail reply" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Reply sent successfully",
+        messageId: result.messageId,
       });
-      return NextResponse.json({ success: true, message: "Reply processed" });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -75,3 +107,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

@@ -15,13 +15,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  PenSquare,
 } from "lucide-react";
 
 interface SidebarNavContentProps {
   urgentCount?: number;
+  onOpenCompose?: () => void;
 }
 
-function SidebarNavContent({ urgentCount = 0 }: SidebarNavContentProps) {
+function SidebarNavContent({ urgentCount = 0, onOpenCompose }: SidebarNavContentProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentView = searchParams.get("view") || "inbox";
@@ -138,6 +140,23 @@ function SidebarNavContent({ urgentCount = 0 }: SidebarNavContentProps) {
             {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
           </button>
         </div>
+
+        {/* Compose Action Button */}
+        {onOpenCompose && (
+          <div className="p-2 border-b border-[var(--border-subtle)]">
+            <button
+              onClick={onOpenCompose}
+              className={cn(
+                "flex w-full items-center justify-center space-x-2 rounded-md bg-[#3F5F8F] hover:bg-[#344F77] text-white py-1.5 text-xs font-semibold shadow-xs transition-colors cursor-pointer focus-ring",
+                isCollapsed && "px-0"
+              )}
+              title="Compose New Email (C)"
+            >
+              <PenSquare className="h-3.5 w-3.5 shrink-0" />
+              {!isCollapsed && <span>Compose</span>}
+            </button>
+          </div>
+        )}
 
         {/* Structured Navigation Groups */}
         <nav className="flex-1 py-3 px-2 space-y-4 overflow-y-auto custom-scrollbar">

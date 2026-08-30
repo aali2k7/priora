@@ -227,3 +227,385 @@ export async function fetchLiveGmailThreads(userId: string): Promise<{ threads: 
     return { threads: MOCK_THREADS, isLive: false };
   }
 }
+
+export interface SendEmailOptions {
+  from: string;
+  to: string | string[];
+  cc?: string | string[];
+  bcc?: string | string[];
+  subject: string;
+  bodyText: string;
+  inReplyTo?: string;
+  references?: string;
+}
+
+/**
+ * Formats a valid RFC 2822 email message with Base64 content transfer encoding
+ * and returns it encoded as RFC 4648 Base64URL (no padding) ready for Gmail API.
+ */
+export function buildRFC2822Message(options: SendEmailOptions): string {
+  const toList = Array.isArray(options.to) ? options.to : [options.to];
+  const lines: string[] = [];
+
+  lines.push(`From: ${options.from}`);
+  lines.push(`To: ${toList.filter(Boolean).join(", ")}`);
+
+  if (options.cc) {
+    const ccList = Array.isArray(options.cc) ? options.cc : [options.cc];
+    const validCc = ccList.filter(Boolean);
+    if (validCc.length > 0) {
+      lines.push(`Cc: ${validCc.join(", ")}`);
+    }
+  }
+
+  if (options.bcc) {
+    const bccList = Array.isArray(options.bcc) ? options.bcc : [options.bcc];
+    const validBcc = bccList.filter(Boolean);
+    if (validBcc.length > 0) {
+      lines.push(`Bcc: ${validBcc.join(", ")}`);
+    }
+  }
+
+  // Encode UTF-8 subject per RFC 2047 MIME
+  const encodedSubject = `=?UTF-8?B?${Buffer.from(options.subject || "(No Subject)", "utf-8").toString("base64")}?=`;
+  lines.push(`Subject: ${encodedSubject}`);
+
+  if (options.inReplyTo) {
+    lines.push(`In-Reply-To: ${options.inReplyTo}`);
+  }
+  if (options.references) {
+    lines.push(`References: ${options.references}`);
+  }
+
+  lines.push("MIME-Version: 1.0");
+  lines.push('Content-Type: text/plain; charset="UTF-8"');
+  lines.push("Content-Transfer-Encoding: base64");
+  lines.push("");
+  lines.push(Buffer.from(options.bodyText || "", "utf-8").toString("base64"));
+
+  const raw = lines.join("\r\n");
+  return Buffer.from(raw, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+export interface SendGmailMessageParams {
+  userId: string;
+  to: string | string[];
+  subject: string;
+  bodyText: string;
+  threadId?: string; // Database thread ID or Gmail thread ID
+  inReplyTo?: string;
+  references?: string;
+  cc?: string | string[];
+  bcc?: string | string[];
+}
+
+/**
+ * Dispatches an email message using the user's connected Gmail OAuth token,
+ * and updates the local PostgreSQL database cache via Prisma.
+ */
+export async function sendGmailMessage(params: SendGmailMessageParams): Promise<{
+  success: boolean;
+  messageId?: string;
+  threadId?: string;
+  error?: string;
+}> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: params.userId },
+      include: {
+        gmailAccounts: true,
+      },
+    });
+
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    const gmailAccount = user.gmailAccounts[0];
+    const senderEmail = gmailAccount?.email || user.email;
+
+    if (!senderEmail) {
+      return { success: false, error: "No sender email associated with account" };
+    }
+
+    const senderName = user.name || "Priora User";
+    const fromHeader = `${senderName} <${senderEmail}>`;
+
+    let targetDbThread = null;
+    let gmailThreadId: string | undefined = undefined;
+
+    if (params.threadId) {
+      targetDbThread = await prisma.thread.findFirst({
+        where: {
+          OR: [{ id: params.threadId }, { gmailThreadId: params.threadId }],
+          ...(gmailAccount ? { accountId: gmailAccount.id } : { account: { userId: user.id } }),
+        },
+        include: {
+          emails: { orderBy: { internalDate: "asc" } },
+        },
+      });
+
+      if (targetDbThread) {
+        gmailThreadId = targetDbThread.gmailThreadId;
+      }
+    }
+
+    // Retrieve valid Google OAuth Access Token
+    const accessToken = await getValidAccessToken(user.id);
+
+    if (!accessToken) {
+      return {
+        success: false,
+        error: "No Google OAuth access token found. Please sign in with Google to enable sending emails.",
+      };
+    }
+
+    const base64UrlMessage = buildRFC2822Message({
+      from: fromHeader,
+      to: params.to,
+      cc: params.cc,
+      bcc: params.bcc,
+      subject: params.subject,
+      bodyText: params.bodyText,
+      inReplyTo: params.inReplyTo,
+      references: params.references,
+    });
+
+    const sendPayload: { raw: string; threadId?: string } = {
+      raw: base64UrlMessage,
+    };
+
+    if (gmailThreadId) {
+      sendPayload.threadId = gmailThreadId;
+    }
+
+    console.log(`[Gmail Service] Sending email via Gmail API for ${senderEmail} (thread: ${gmailThreadId || "new"})...`);
+
+    const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(sendPayload),
+    });
+
+    if (!sendRes.ok) {
+      const errText = await sendRes.text();
+      console.error(`[Gmail Service] Gmail API send failed (${sendRes.status}):`, errText);
+
+      if (sendRes.status === 403) {
+        return {
+          success: false,
+          error:
+            "Permission denied by Google. Please sign out and sign in again to grant the required email sending permission (gmail.send).",
+        };
+      }
+
+      return {
+        success: false,
+        error: `Gmail API error (${sendRes.status}): ${errText}`,
+      };
+    }
+
+    const result = await sendRes.json();
+    const sentGmailId = result.id as string;
+    const sentThreadId = (result.threadId || gmailThreadId || sentGmailId) as string;
+
+    console.log(`[Gmail Service] Email dispatched successfully. Message ID: ${sentGmailId}, Thread ID: ${sentThreadId}`);
+
+    // Persist sent email to PostgreSQL via Prisma
+    if (gmailAccount) {
+      try {
+        let dbThread = targetDbThread;
+
+        if (!dbThread) {
+          dbThread = await prisma.thread.upsert({
+            where: {
+              accountId_gmailThreadId: {
+                accountId: gmailAccount.id,
+                gmailThreadId: sentThreadId,
+              },
+            },
+            update: {
+              subject: params.subject,
+              snippet: params.bodyText.slice(0, 160),
+              lastMessageAt: new Date(),
+            },
+            create: {
+              accountId: gmailAccount.id,
+              gmailThreadId: sentThreadId,
+              subject: params.subject,
+              snippet: params.bodyText.slice(0, 160),
+              lastMessageAt: new Date(),
+              internalDate: new Date(),
+              priority: "normal",
+              category: "fyi",
+            },
+            include: {
+              emails: { orderBy: { internalDate: "asc" } },
+            },
+          });
+        } else {
+          await prisma.thread.update({
+            where: { id: dbThread.id },
+            data: {
+              lastMessageAt: new Date(),
+              snippet: params.bodyText.slice(0, 160),
+            },
+          });
+        }
+
+        const toStr = Array.isArray(params.to) ? params.to.join(", ") : params.to;
+
+        await prisma.email.upsert({
+          where: {
+            accountId_gmailId: {
+              accountId: gmailAccount.id,
+              gmailId: sentGmailId,
+            },
+          },
+          update: {
+            subject: params.subject,
+            snippet: params.bodyText.slice(0, 160),
+            bodyText: params.bodyText,
+            internalDate: new Date(),
+          },
+          create: {
+            accountId: gmailAccount.id,
+            gmailId: sentGmailId,
+            gmailThreadId: sentThreadId,
+            threadId: dbThread.id,
+            subject: params.subject,
+            fromEmail: senderEmail,
+            fromName: senderName,
+            toEmail: toStr,
+            toName: toStr,
+            snippet: params.bodyText.slice(0, 160),
+            bodyText: params.bodyText,
+            internalDate: new Date(),
+            isUnread: false,
+          },
+        });
+      } catch (dbErr) {
+        console.warn("[Gmail Service] Failed to persist sent email to PostgreSQL:", dbErr);
+      }
+    }
+
+    return {
+      success: true,
+      messageId: sentGmailId,
+      threadId: sentThreadId,
+    };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Internal error sending email";
+    console.error("[Gmail Service] Unexpected error in sendGmailMessage:", error);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Sends a reply to an existing email thread using the user's Gmail account.
+ */
+export async function sendGmailReply(
+  userId: string,
+  threadId: string,
+  replyText: string,
+  archiveAfterSend: boolean = false
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const thread = await prisma.thread.findFirst({
+      where: {
+        OR: [{ id: threadId }, { gmailThreadId: threadId }],
+        account: { userId },
+      },
+      include: {
+        emails: { orderBy: { internalDate: "asc" } },
+        account: true,
+      },
+    });
+
+    if (!thread) {
+      return { success: false, error: "Thread not found" };
+    }
+
+    // Determine recipient: find the most recent incoming email's fromEmail
+    const incomingEmails = thread.emails.filter((e) => e.fromEmail !== thread.account.email);
+    const lastIncoming = incomingEmails[incomingEmails.length - 1] || thread.emails[0];
+    const recipientEmail = lastIncoming?.fromEmail || thread.account.email;
+
+    const subject = thread.subject?.startsWith("Re:") ? thread.subject : `Re: ${thread.subject || ""}`;
+
+    const sendResult = await sendGmailMessage({
+      userId,
+      threadId: thread.id,
+      to: recipientEmail,
+      subject,
+      bodyText: replyText,
+    });
+
+    if (!sendResult.success) {
+      return sendResult;
+    }
+
+    if (archiveAfterSend) {
+      await prisma.thread.update({
+        where: { id: thread.id },
+        data: { isArchived: true },
+      });
+
+      modifyGmailThreadLabels(userId, thread.gmailThreadId, [], ["INBOX"]).catch((e) =>
+        console.warn("[Gmail Service] Archive thread label update warning:", e)
+      );
+    }
+
+    return {
+      success: true,
+      messageId: sendResult.messageId,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to send thread reply";
+    console.error("[Gmail Service] Error in sendGmailReply:", err);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Modifies labels for a thread in live Gmail (e.g. archive by removing INBOX, mark as read by removing UNREAD).
+ */
+export async function modifyGmailThreadLabels(
+  userId: string,
+  gmailThreadId: string,
+  addLabelIds: string[] = [],
+  removeLabelIds: string[] = []
+): Promise<boolean> {
+  try {
+    const accessToken = await getValidAccessToken(userId);
+    if (!accessToken) return false;
+
+    const res = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${gmailThreadId}/modify`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          addLabelIds,
+          removeLabelIds,
+        }),
+      }
+    );
+
+    return res.ok;
+  } catch (err) {
+    console.warn("[Gmail Service] Failed to modify Gmail thread labels:", err);
+    return false;
+  }
+}
+

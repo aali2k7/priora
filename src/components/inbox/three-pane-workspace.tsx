@@ -65,8 +65,15 @@ export function ThreePaneWorkspace({
 
     loadWorkspaceData();
 
+    const handleEmailSent = () => {
+      loadWorkspaceData();
+    };
+
+    window.addEventListener("priora-email-sent", handleEmailSent);
+
     return () => {
       ignore = true;
+      window.removeEventListener("priora-email-sent", handleEmailSent);
     };
   }, [initialThreadId]);
 

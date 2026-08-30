@@ -112,32 +112,52 @@ export class EmailService {
   }
 
   /**
-   * Sends an email reply.
+   * Sends an email reply to an existing thread.
    */
-  static async sendReply(threadId: string, replyText: string): Promise<{ success: boolean; messageId?: string }> {
+  static async sendReply(
+    threadId: string,
+    replyText: string,
+    archiveAfterSend: boolean = false
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     if (typeof window !== "undefined") {
       try {
-        const res = await fetch("/api/gmail/action", {
+        const res = await fetch("/api/gmail/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "reply", threadId, value: replyText }),
+          body: JSON.stringify({
+            threadId,
+            bodyText: replyText,
+            archiveAfterSend,
+          }),
         });
-        if (res.ok) return { success: true };
-      } catch (err) {
-        console.warn("[EmailService] sendReply API failed, updating local state:", err);
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          return { success: true, messageId: data.messageId };
+        } else if (!res.ok) {
+          console.warn("[EmailService] sendReply API failed with error:", data.error);
+          return {
+            success: false,
+            error: data.error || `Server returned error (${res.status})`,
+          };
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Network error";
+        console.warn("[EmailService] sendReply API request failed:", err);
+        return { success: false, error: msg };
       }
     }
 
     const thread = this.threads.find((t) => t.id === threadId);
     if (!thread) {
-      return { success: false };
+      return { success: false, error: "Thread not found" };
     }
 
     const newMessage = {
       id: `msg_sent_${Date.now()}`,
       threadId,
-      sender: { name: "Alex Mercer", email: "alex.mercer@priora.ai" },
-      recipients: thread.participants.filter((p) => p.email !== "alex.mercer@priora.ai"),
+      sender: { name: "Me", email: "user@gmail.com" },
+      recipients: thread.participants.filter((p) => p.email !== "user@gmail.com"),
       subject: `Re: ${thread.subject}`,
       bodySnippet: replyText.slice(0, 100) + "...",
       bodyText: replyText,
@@ -147,8 +167,56 @@ export class EmailService {
 
     thread.messages.push(newMessage);
     thread.lastMessageTimestamp = "Just now";
-    thread.isArchived = true;
+    if (archiveAfterSend) {
+      thread.isArchived = true;
+    }
 
     return { success: true, messageId: newMessage.id };
   }
+
+  /**
+   * Composes and sends a new standalone email.
+   */
+  static async sendNewEmail(params: {
+    to: string | string[];
+    subject: string;
+    bodyText: string;
+    cc?: string | string[];
+    bcc?: string | string[];
+  }): Promise<{ success: boolean; messageId?: string; threadId?: string; error?: string }> {
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/gmail/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          return {
+            success: true,
+            messageId: data.messageId,
+            threadId: data.threadId,
+          };
+        } else {
+          return {
+            success: false,
+            error: data.error || `Server returned error (${res.status})`,
+          };
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Network error";
+        console.warn("[EmailService] sendNewEmail API request failed:", err);
+        return { success: false, error: msg };
+      }
+    }
+
+    return {
+      success: true,
+      messageId: `msg_new_${Date.now()}`,
+      threadId: `thread_new_${Date.now()}`,
+    };
+  }
 }
+

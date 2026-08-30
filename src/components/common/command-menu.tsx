@@ -9,13 +9,24 @@ import { ShortcutKey } from "@/components/ui/shortcut-key";
 interface CommandMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenCompose?: () => void;
 }
 
-export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
+export function CommandMenu({ isOpen, onClose, onOpenCompose }: CommandMenuProps) {
   const router = useRouter();
   const [query, setQuery] = React.useState("");
 
   const actions = [
+    {
+      id: "act_compose",
+      title: "Compose New Email",
+      subtitle: "Write and send a new email via Gmail",
+      icon: Sparkles,
+      shortcut: ["C"],
+      action: () => {
+        if (onOpenCompose) onOpenCompose();
+      },
+    },
     {
       id: "nav_dashboard",
       title: "Executive Overview",
