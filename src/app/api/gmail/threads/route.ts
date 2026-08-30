@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncUserGmailInbox, isUserSyncing, SYNC_COOLDOWN_MS } from "@/lib/gmail-sync";
+import { setupGmailWatch } from "@/lib/gmail-watch";
 import { EmailThread, PriorityLevel, CategoryTag } from "@/types/email";
 import { getRetentionCutoffDate } from "@/lib/retention";
 
@@ -25,8 +26,23 @@ export async function GET() {
       include: { syncState: true },
     });
 
-    // Determine if automatic background sync is needed (e.g. initial setup or > 10m old)
-    const isActivelySyncing = isUserSyncing(session.user.id) || account?.syncState?.status === "syncing";
+    const isMemorySyncing = isUserSyncing(session.user.id);
+    const isDbSyncing =
+      account?.syncState?.status === "syncing" &&
+      account?.syncState?.updatedAt &&
+      Date.now() - new Date(account.syncState.updatedAt).getTime() < 2 * 60 * 1000;
+
+    // Auto-heal stale "syncing" state in database if older than 2 minutes
+    if (account?.syncState?.status === "syncing" && !isMemorySyncing && !isDbSyncing) {
+      prisma.syncState
+        .update({
+          where: { id: account.syncState.id },
+          data: { status: "completed" },
+        })
+        .catch(() => {});
+    }
+
+    const isActivelySyncing = isMemorySyncing || isDbSyncing;
     const needsBackgroundSync =
       !account ||
       !account.lastSyncedAt ||
@@ -46,7 +62,14 @@ export async function GET() {
       });
     }
 
-    // 2. Fetch rolling 15-day threads from Neon PostgreSQL cache
+    // Auto-register real-time Gmail Push Watch if configured and not yet active
+    if (!account.historyId && process.env.GMAIL_PUBSUB_TOPIC_NAME) {
+      setupGmailWatch(session.user.id).catch((watchErr) => {
+        console.warn("[GET /api/gmail/threads] Auto watch registration notice:", watchErr);
+      });
+    }
+
+    // 2. Fetch rolling 15-day threads from Neon PostgreSQL cache with lightweight email projection
     const cutoffDate = getRetentionCutoffDate(15);
     const dbThreads = await prisma.thread.findMany({
       where: {
@@ -59,6 +82,17 @@ export async function GET() {
       orderBy: { lastMessageAt: "desc" },
       include: {
         emails: {
+          select: {
+            id: true,
+            fromName: true,
+            fromEmail: true,
+            toName: true,
+            toEmail: true,
+            subject: true,
+            snippet: true,
+            internalDate: true,
+            isUnread: true,
+          },
           orderBy: { internalDate: "asc" },
         },
       },
@@ -81,7 +115,7 @@ export async function GET() {
         ],
         subject: e.subject || t.subject || "(No Subject)",
         bodySnippet: e.snippet || "",
-        bodyText: e.bodyText || e.snippet || "",
+        bodyText: e.snippet || "",
         timestamp: e.internalDate
           ? new Date(e.internalDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
           : "Recently",

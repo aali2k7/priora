@@ -9,6 +9,7 @@ import { MOCK_EXECUTIVE_USER } from "@/lib/mock-data";
 import { RefreshCw, LogOut, Lock, Sun, Moon, Monitor } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { authClient, useSession } from "@/lib/auth-client";
+import { clearClientCache } from "@/lib/client-cache";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function SettingsPage() {
     try {
       if (typeof window !== "undefined") {
         localStorage.removeItem("priora-demo-session");
+        clearClientCache();
       }
       await authClient.signOut();
     } catch (err) {

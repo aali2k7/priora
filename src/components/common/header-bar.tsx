@@ -7,6 +7,7 @@ import { ShortcutKey } from "@/components/ui/shortcut-key";
 import { MOCK_EXECUTIVE_USER } from "@/lib/mock-data";
 import { useTheme } from "@/components/theme-provider";
 import { authClient, useSession } from "@/lib/auth-client";
+import { clearClientCache } from "@/lib/client-cache";
 
 interface HeaderBarProps {
   onOpenCommandMenu?: () => void;
@@ -70,6 +71,7 @@ function HeaderBarContent({ onOpenCommandMenu }: HeaderBarProps) {
     try {
       if (typeof window !== "undefined") {
         localStorage.removeItem("priora-demo-session");
+        clearClientCache();
       }
       await authClient.signOut();
     } catch (err) {

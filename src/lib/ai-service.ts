@@ -13,6 +13,7 @@ import {
   analyzeEmailThreadWithGemini,
   generateDraftWithGemini,
 } from "@/lib/gemini";
+import { isAIAvailable } from "@/lib/groq";
 
 interface DbThreadWithEmails {
   id: string;
@@ -53,9 +54,12 @@ interface DbThreadWithEmails {
   } | null;
 }
 
+// In-memory mutex map to prevent redundant concurrent LLM calls for the same thread
+const activeAnalysisMap = new Map<string, Promise<AISummary>>();
+
 /**
  * Server-side AI Service Layer for Priora.
- * Strictly server-side: Interfaces with PostgreSQL/Neon and Google Gemini API.
+ * Strictly server-side: Interfaces with PostgreSQL/Neon and Groq AI API.
  * Never uses mock AI data in production behavior.
  */
 export class AIService {
@@ -157,89 +161,104 @@ export class AIService {
   }
 
   /**
-   * Analyzes an email thread with Gemini and persists the structured results in PostgreSQL.
+   * Analyzes an email thread with Groq and persists the structured results in PostgreSQL.
    */
   static async analyzeThreadWithGemini(
     threadId: string,
     forceReanalyze = false
   ): Promise<AISummary> {
-    // 1. Fetch thread and its emails from database
-    const thread = await prisma.thread.findFirst({
-      where: {
-        OR: [{ id: threadId }, { gmailThreadId: threadId }],
-      },
-      include: {
-        emails: { orderBy: { internalDate: "asc" } },
-        account: true,
-      },
-    });
-
-    if (!thread) {
-      throw new Error(`[AIService] Thread not found in database: ${threadId}`);
+    // 1. Return in-flight analysis promise if already running
+    if (!forceReanalyze && activeAnalysisMap.has(threadId)) {
+      return activeAnalysisMap.get(threadId)!;
     }
 
-    // 2. Return cached analysis if already analyzed and not forced
-    if (thread.analyzedAt && !forceReanalyze && thread.aiSummary) {
-      return this.formatThreadToAISummary(thread as DbThreadWithEmails);
-    }
-
-    // 3. Format messages for Gemini
-    const messages = thread.emails.map((e) => ({
-      sender: e.fromName ? `${e.fromName} <${e.fromEmail}>` : e.fromEmail,
-      recipient: e.toName ? `${e.toName} <${e.toEmail}>` : (e.toEmail || ""),
-      timestamp: e.internalDate ? new Date(e.internalDate).toLocaleString() : "Recent",
-      snippet: e.snippet || "",
-      bodyText: e.bodyText || e.snippet || "",
-    }));
-
-    if (messages.length === 0 && thread.snippet) {
-      messages.push({
-        sender: "Sender",
-        recipient: thread.account?.email || "Recipient",
-        timestamp: thread.lastMessageAt ? new Date(thread.lastMessageAt).toLocaleString() : "Recent",
-        snippet: thread.snippet,
-        bodyText: thread.snippet,
+    const runAnalysis = async (): Promise<AISummary> => {
+      // 2. Fetch thread and its emails from database
+      const thread = await prisma.thread.findFirst({
+        where: {
+          OR: [{ id: threadId }, { gmailThreadId: threadId }],
+        },
+        include: {
+          emails: { orderBy: { internalDate: "asc" } },
+          account: true,
+        },
       });
-    }
 
-    // 4. Call Gemini API
-    console.log(`[AIService] Running Gemini analysis for thread ${thread.id} ("${thread.subject}")...`);
-    const analysis = await analyzeEmailThreadWithGemini({
-      subject: thread.subject || "(No Subject)",
-      messages,
-      accountEmail: thread.account?.email,
+      if (!thread) {
+        throw new Error(`[AIService] Thread not found in database: ${threadId}`);
+      }
+
+      // 3. Return cached analysis if already analyzed in DB and not forced
+      if (thread.analyzedAt && !forceReanalyze && (thread.aiSummary || thread.executiveBrief)) {
+        return this.formatThreadToAISummary(thread as DbThreadWithEmails);
+      }
+
+      // 4. Format messages for Groq
+      const messages = thread.emails.map((e) => ({
+        sender: e.fromName ? `${e.fromName} <${e.fromEmail}>` : e.fromEmail,
+        recipient: e.toName ? `${e.toName} <${e.toEmail}>` : (e.toEmail || ""),
+        timestamp: e.internalDate ? new Date(e.internalDate).toLocaleString() : "Recent",
+        snippet: e.snippet || "",
+        bodyText: e.bodyText || e.snippet || "",
+      }));
+
+      if (messages.length === 0 && thread.snippet) {
+        messages.push({
+          sender: "Sender",
+          recipient: thread.account?.email || "Recipient",
+          timestamp: thread.lastMessageAt ? new Date(thread.lastMessageAt).toLocaleString() : "Recent",
+          snippet: thread.snippet,
+          bodyText: thread.snippet,
+        });
+      }
+
+      // 5. Call Groq API
+      console.log(`[AIService] Running Groq analysis for thread ${thread.id} ("${thread.subject}")...`);
+      const analysis = await analyzeEmailThreadWithGemini({
+        subject: thread.subject || "(No Subject)",
+        messages,
+        accountEmail: thread.account?.email,
+      });
+
+      // 6. Persist validated analysis into PostgreSQL via Prisma
+      const updatedThread = await prisma.thread.update({
+        where: { id: thread.id },
+        data: {
+          aiSummary: analysis.summary,
+          executiveBrief: analysis.executiveBrief,
+          priority: analysis.priority,
+          category: analysis.category,
+          urgencyScore: analysis.urgencyScore,
+          importanceScore: analysis.importanceScore,
+          actionRequired: analysis.actionRequired,
+          keyDecisionRequired: analysis.keyDecisionRequired,
+          keyInformation: analysis.keyInformation as unknown as Prisma.InputJsonValue,
+          aiInsights: analysis.aiInsights as unknown as Prisma.InputJsonValue,
+          recommendedAction: {
+            actionTitle: analysis.suggestedAction,
+            confidenceScore: analysis.keyInformation.confidenceScore || 95,
+            reasoning: analysis.reason,
+          } as unknown as Prisma.InputJsonValue,
+          suggestedReply: analysis.suggestedReply,
+          analyzedAt: new Date(),
+          aiVersion: 1,
+        },
+        include: {
+          emails: { orderBy: { internalDate: "asc" } },
+        },
+      });
+
+      console.log(`[AIService] Successfully persisted Groq analysis in DB for thread ${thread.id}`);
+      return this.formatThreadToAISummary(updatedThread as DbThreadWithEmails);
+    };
+
+    const promise = runAnalysis();
+    activeAnalysisMap.set(threadId, promise);
+    promise.finally(() => {
+      activeAnalysisMap.delete(threadId);
     });
 
-    // 5. Persist validated Gemini analysis into PostgreSQL via Prisma
-    const updatedThread = await prisma.thread.update({
-      where: { id: thread.id },
-      data: {
-        aiSummary: analysis.summary,
-        executiveBrief: analysis.executiveBrief,
-        priority: analysis.priority,
-        category: analysis.category,
-        urgencyScore: analysis.urgencyScore,
-        importanceScore: analysis.importanceScore,
-        actionRequired: analysis.actionRequired,
-        keyDecisionRequired: analysis.keyDecisionRequired,
-        keyInformation: analysis.keyInformation as unknown as Prisma.InputJsonValue,
-        aiInsights: analysis.aiInsights as unknown as Prisma.InputJsonValue,
-        recommendedAction: {
-          actionTitle: analysis.suggestedAction,
-          confidenceScore: analysis.keyInformation.confidenceScore || 95,
-          reasoning: analysis.reason,
-        } as unknown as Prisma.InputJsonValue,
-        suggestedReply: analysis.suggestedReply,
-        analyzedAt: new Date(),
-        aiVersion: 1,
-      },
-      include: {
-        emails: { orderBy: { internalDate: "asc" } },
-      },
-    });
-
-    console.log(`[AIService] Successfully persisted Gemini analysis for thread ${thread.id}`);
-    return this.formatThreadToAISummary(updatedThread as DbThreadWithEmails);
+    return promise;
   }
 
   /**
@@ -270,16 +289,16 @@ export class AIService {
         return this.formatThreadToAISummary(thread as DbThreadWithEmails);
       }
 
-      // If not analyzed, attempt Gemini analysis
-      if (process.env.GEMINI_API_KEY) {
+      // If not analyzed, attempt Groq AI analysis
+      if (isAIAvailable()) {
         try {
           return await this.analyzeThreadWithGemini(thread.id);
-        } catch (geminiError) {
-          console.error(`[AIService] On-demand Gemini analysis failed for thread ${thread.id}:`, geminiError);
+        } catch (aiError) {
+          console.error(`[AIService] On-demand Groq analysis failed for thread ${thread.id}:`, aiError);
           return {
             threadId: thread.id,
             executiveBrief: "Analysis unavailable",
-            bulletPoints: ["Gemini analysis failed to process this thread."],
+            bulletPoints: ["AI analysis failed to process this thread."],
           };
         }
       }
@@ -300,7 +319,7 @@ export class AIService {
   }
 
   /**
-   * Generates a context-aware email response draft using Gemini or stored suggestion.
+   * Generates a context-aware email response draft using Groq or stored suggestion.
    */
   static async getDraftResponse(
     threadId: string,
@@ -330,15 +349,15 @@ export class AIService {
       if (thread.suggestedReply && tone === "concise" && !customInstructions) {
         return {
           threadId: thread.id,
-          intentStrategy: "Strategy: Formulated from persisted Gemini thread analysis.",
+          intentStrategy: "Strategy: Formulated from persisted AI thread analysis.",
           draftText: thread.suggestedReply,
           suggestedTone: "concise",
           lastUpdated: thread.analyzedAt ? "Analyzed recently" : "Just now",
         };
       }
 
-      // If Gemini API is available and thread has messages, generate dynamic response
-      if (process.env.GEMINI_API_KEY && (thread.emails.length > 0 || thread.snippet)) {
+      // If AI API is available and thread has messages, generate dynamic response
+      if (isAIAvailable() && (thread.emails.length > 0 || thread.snippet)) {
         try {
           const messages = thread.emails.map((e) => ({
             sender: e.fromName || e.fromEmail,
@@ -372,8 +391,8 @@ export class AIService {
             suggestedTone: tone,
             lastUpdated: "Just now",
           };
-        } catch (geminiError) {
-          console.warn(`[AIService] Gemini draft generation failed for tone ${tone}:`, geminiError);
+        } catch (aiError) {
+          console.warn(`[AIService] Groq draft generation failed for tone ${tone}:`, aiError);
         }
       }
 
@@ -398,15 +417,14 @@ export class AIService {
   }
 
   /**
-   * Safely batch analyzes unanalyzed threads for a Gmail account in the background.
+   * Safely batch analyzes unanalyzed threads for a Gmail account in the background using Groq.
    * Runs in parallel batches of 3 to quickly pre-warm executive AI briefings.
    */
   static async analyzeUnanalyzedThreadsForAccount(
     accountId: string,
-    limit = 10
+    limit = 2
   ): Promise<{ processed: number; errors: number }> {
-    if (!process.env.GEMINI_API_KEY) {
-      console.log("[AIService] Skipping background analysis: GEMINI_API_KEY not configured.");
+    if (!isAIAvailable()) {
       return { processed: 0, errors: 0 };
     }
 
@@ -424,33 +442,20 @@ export class AIService {
       return { processed: 0, errors: 0 };
     }
 
-    console.log(`[AIService] Starting parallel AI analysis for ${unanalyzed.length} threads (Account: ${accountId})...`);
     let processed = 0;
     let errors = 0;
 
-    const CHUNK_SIZE = 3;
-    for (let i = 0; i < unanalyzed.length; i += CHUNK_SIZE) {
-      const chunk = unanalyzed.slice(i, i + CHUNK_SIZE);
-      const results = await Promise.allSettled(
-        chunk.map((item) => this.analyzeThreadWithGemini(item.id))
-      );
-
-      for (const res of results) {
-        if (res.status === "fulfilled") {
-          processed++;
-        } else {
-          errors++;
-          console.error("[AIService] Failed background analysis item:", res.reason);
-        }
-      }
-
-      // Brief breather between chunks to stay well within Google GenAI quotas
-      if (i + CHUNK_SIZE < unanalyzed.length) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const item of unanalyzed) {
+      try {
+        await this.analyzeThreadWithGemini(item.id);
+        processed++;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      } catch (err) {
+        errors++;
+        console.warn(`[AIService] Notice: Background analysis skipped for thread ${item.id}:`, err);
       }
     }
 
-    console.log(`[AIService] AI pre-warming finished: ${processed} analyzed, ${errors} errors.`);
     return { processed, errors };
   }
 

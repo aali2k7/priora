@@ -8,6 +8,8 @@ import { ThreadReader } from "./thread-reader";
 import { Inbox, ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+import { getCachedThreads, setCachedThreads } from "@/lib/client-cache";
+
 interface ThreePaneWorkspaceProps {
   initialThreads?: EmailThread[];
   initialThreadId?: string;
@@ -26,7 +28,7 @@ export function ThreePaneWorkspace({
   const urlView = (searchParams.get("view") as ViewMode) || null;
 
   const [threads, setThreads] = React.useState<EmailThread[]>(initialThreads);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const [isLoading, setIsLoading] = React.useState(initialThreads.length === 0);
   const [isSyncing, setIsSyncing] = React.useState(false);
   const [internalViewMode, setInternalViewMode] = React.useState<ViewMode>(initialView);
   const viewMode = urlView || internalViewMode;
@@ -36,7 +38,19 @@ export function ThreePaneWorkspace({
   const [activeThreadId, setActiveThreadId] = React.useState<string>(initialThreadId || "");
   const [isMobileViewThread, setIsMobileViewThread] = React.useState(!!initialThreadId);
 
-  // Fetch threads on mount and setup 10-minute cadence & event listeners
+  // 1. Instant Cache Restoration on Browser Mount
+  React.useEffect(() => {
+    const cached = getCachedThreads();
+    if (cached && cached.length > 0) {
+      setThreads(cached);
+      setIsLoading(false);
+      if (!initialThreadId || !cached.some((t: EmailThread) => t.id === initialThreadId)) {
+        setActiveThreadId((prev) => prev || cached[0].id);
+      }
+    }
+  }, [initialThreadId]);
+
+  // 2. Fetch threads on mount and setup 10-minute cadence & event listeners
   React.useEffect(() => {
     let ignore = false;
 
@@ -48,6 +62,7 @@ export function ThreePaneWorkspace({
           setIsSyncing(!!data.isSyncing);
           if (data.threads) {
             setThreads(data.threads);
+            setCachedThreads(data.threads);
             if (
               data.threads.length > 0 &&
               (!initialThreadId || !data.threads.some((t: EmailThread) => t.id === initialThreadId))
@@ -72,56 +87,66 @@ export function ThreePaneWorkspace({
     window.addEventListener("priora-email-sent", handleRefresh);
     window.addEventListener("priora-email-synced", handleRefresh);
 
-    // 10-minute background auto-refresh
-    const tenMinInterval = setInterval(() => {
-      loadWorkspaceData();
-    }, 10 * 60 * 1000);
+    // 3. Connect to real-time push event stream (SSE)
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource("/api/events");
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "new-email" || payload.type === "sync-complete") {
+            console.log("[Workspace] Real-time email push received via SSE:", payload);
+            loadWorkspaceData();
+          }
+        } catch {
+          // heartbeat or non-json message
+        }
+      };
+    } catch (sseErr) {
+      console.warn("[Workspace] SSE connection warning:", sseErr);
+    }
 
     return () => {
       ignore = true;
       window.removeEventListener("priora-email-sent", handleRefresh);
       window.removeEventListener("priora-email-synced", handleRefresh);
-      clearInterval(tenMinInterval);
+      if (eventSource) {
+        eventSource.close();
+      }
     };
   }, [initialThreadId]);
 
-  // Gentle background check while active sync is ongoing (6s backoff, only while isSyncing)
+  // One-time sync check only if inbox is completely empty and initial background sync is running
   React.useEffect(() => {
-    if (!isSyncing) return;
+    if (!isSyncing || threads.length > 0) return;
 
     let ignore = false;
     let timerId: NodeJS.Timeout;
 
-    const pollSyncStatus = async () => {
+    const pollInitialSync = async () => {
       try {
         const res = await fetch("/api/gmail/threads");
         if (res.ok && !ignore) {
           const data = await res.json();
-          const stillSyncing = !!data.isSyncing;
-          setIsSyncing(stillSyncing);
+          setIsSyncing(!!data.isSyncing);
           if (data.threads && data.threads.length > 0) {
             setThreads(data.threads);
+            setCachedThreads(data.threads);
             setActiveThreadId((prev) => prev || data.threads[0]?.id || "");
-          }
-          if (stillSyncing && !ignore) {
-            timerId = setTimeout(pollSyncStatus, 6000);
           }
         }
       } catch (err) {
-        console.error("[Workspace] Error checking sync status:", err);
-        if (!ignore) {
-          timerId = setTimeout(pollSyncStatus, 10000);
-        }
+        console.error("[Workspace] Error checking initial sync:", err);
       }
     };
 
-    timerId = setTimeout(pollSyncStatus, 4000);
+    timerId = setTimeout(pollInitialSync, 5000);
 
     return () => {
       ignore = true;
       clearTimeout(timerId);
     };
-  }, [isSyncing]);
+  }, [isSyncing, threads.length]);
 
   // Qualification for FOCUSED view derived from real persisted AI analysis
   const isThreadFocused = (t: EmailThread): boolean => {
@@ -195,7 +220,10 @@ export function ThreePaneWorkspace({
       const res = await fetch("/api/gmail/threads");
       if (res.ok) {
         const data = await res.json();
-        if (data.threads) setThreads(data.threads);
+        if (data.threads) {
+          setThreads(data.threads);
+          setCachedThreads(data.threads);
+        }
       }
     } catch (err) {
       console.error("[Workspace] Error refreshing threads:", err);

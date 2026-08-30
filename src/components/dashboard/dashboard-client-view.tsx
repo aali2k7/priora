@@ -6,6 +6,7 @@ import { ExecutiveBriefing } from "@/types/ai";
 import { BriefingBanner } from "./briefing-banner";
 import { HighPriorityFeed } from "./high-priority-feed";
 import { RefreshCw } from "lucide-react";
+import { getCachedThreads, setCachedThreads } from "@/lib/client-cache";
 
 interface DashboardClientViewProps {
   initialBriefing: ExecutiveBriefing;
@@ -15,6 +16,15 @@ export function DashboardClientView({ initialBriefing }: DashboardClientViewProp
   const [threads, setThreads] = useState<EmailThread[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Restore cached threads immediately on mount
+  useEffect(() => {
+    const cached = getCachedThreads();
+    if (cached && cached.length > 0) {
+      setThreads(cached);
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -27,6 +37,7 @@ export function DashboardClientView({ initialBriefing }: DashboardClientViewProp
           setIsSyncing(!!data.isSyncing);
           if (data.threads) {
             setThreads(data.threads);
+            setCachedThreads(data.threads);
           }
         }
       } catch (err) {
@@ -45,54 +56,64 @@ export function DashboardClientView({ initialBriefing }: DashboardClientViewProp
     window.addEventListener("priora-email-synced", handleRefresh);
     window.addEventListener("priora-email-sent", handleRefresh);
 
-    const tenMinInterval = setInterval(() => {
-      loadData();
-    }, 10 * 60 * 1000);
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource("/api/events");
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "new-email" || payload.type === "sync-complete") {
+            console.log("[Dashboard] Real-time email push received via SSE:", payload);
+            loadData();
+          }
+        } catch {
+          // ignore heartbeat
+        }
+      };
+    } catch (sseErr) {
+      console.warn("[Dashboard] SSE connection warning:", sseErr);
+    }
 
     return () => {
       ignore = true;
       window.removeEventListener("priora-email-synced", handleRefresh);
       window.removeEventListener("priora-email-sent", handleRefresh);
-      clearInterval(tenMinInterval);
+      if (eventSource) {
+        eventSource.close();
+      }
     };
   }, []);
 
-  // Gentle background check while active sync is ongoing
+  // One-time sync check only if threads list is empty and initial sync is running
   useEffect(() => {
-    if (!isSyncing) return;
+    if (!isSyncing || threads.length > 0) return;
 
     let ignore = false;
     let timerId: NodeJS.Timeout;
 
-    const pollSyncStatus = async () => {
+    const pollInitialSync = async () => {
       try {
         const res = await fetch("/api/gmail/threads");
         if (res.ok && !ignore) {
           const data = await res.json();
-          const stillSyncing = !!data.isSyncing;
-          setIsSyncing(stillSyncing);
+          setIsSyncing(!!data.isSyncing);
           if (data.threads && data.threads.length > 0) {
             setThreads(data.threads);
-          }
-          if (stillSyncing && !ignore) {
-            timerId = setTimeout(pollSyncStatus, 6000);
+            setCachedThreads(data.threads);
           }
         }
       } catch (err) {
-        console.error("[Dashboard] Error checking sync status:", err);
-        if (!ignore) {
-          timerId = setTimeout(pollSyncStatus, 10000);
-        }
+        console.error("[Dashboard] Error checking initial sync:", err);
       }
     };
 
-    timerId = setTimeout(pollSyncStatus, 4000);
+    timerId = setTimeout(pollInitialSync, 5000);
 
     return () => {
       ignore = true;
       clearTimeout(timerId);
     };
-  }, [isSyncing]);
+  }, [isSyncing, threads.length]);
 
   if (isLoading && threads.length === 0) {
     return (

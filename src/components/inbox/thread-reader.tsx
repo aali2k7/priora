@@ -10,6 +10,8 @@ import { ShortcutKey } from "@/components/ui/shortcut-key";
 import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle, FileText, Reply } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
 
+import { getCachedSummary, setCachedSummary } from "@/lib/client-cache";
+
 interface ThreadReaderProps {
   thread: EmailThread;
   onThreadUpdated: () => void;
@@ -17,7 +19,7 @@ interface ThreadReaderProps {
 }
 
 export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadReaderProps) {
-  const [summary, setSummary] = React.useState<AISummary | null>(null);
+  const [summary, setSummary] = React.useState<AISummary | null>(() => getCachedSummary(thread.id));
   const [isReanalyzing, setIsReanalyzing] = React.useState(false);
   const [isReplyOpen, setIsReplyOpen] = React.useState(!!autoOpenReply);
   const [expandedMessages, setExpandedMessages] = React.useState<Record<string, boolean>>({
@@ -30,39 +32,52 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
   React.useEffect(() => {
     let ignore = false;
 
+    // 1. Instant check: If thread already has persisted AI summary from PostgreSQL, use it & sync cache
+    if (thread.analyzedAt && (thread.aiSummary || thread.executiveBrief)) {
+      const summaryData: AISummary = {
+        threadId: thread.id,
+        executiveBrief: thread.executiveBrief || thread.aiSummary || "AI Analysis completed.",
+        bulletPoints: [thread.snippet || "Conversation details available in history."],
+        urgencyScore: thread.urgencyScore ?? undefined,
+        importanceScore: thread.importanceScore ?? undefined,
+        actionRequired: thread.actionRequired ?? undefined,
+        analyzedAt: thread.analyzedAt,
+      };
+      setSummary(summaryData);
+      setCachedSummary(thread.id, summaryData);
+      return; // Skip redundant API call
+    }
+
+    // 2. Client cache check: If present in browser localStorage, use it immediately
+    const cached = getCachedSummary(thread.id);
+    if (cached && (cached.executiveBrief || cached.bulletPoints?.length)) {
+      setSummary(cached);
+      return; // Skip redundant API call
+    }
+
+    // 3. Only fetch from API if thread has not yet been analyzed
     async function fetchSummary() {
       try {
         const res = await fetch(`/api/ai/summary?threadId=${encodeURIComponent(thread.id)}`);
-        if (res.ok) {
+        if (res.ok && !ignore) {
           const data = await res.json();
-          if (data.summary && !ignore) {
+          if (data.summary) {
             setSummary(data.summary);
+            setCachedSummary(thread.id, data.summary);
             return;
           }
         }
       } catch (err) {
-        console.warn("[ThreadReader] Failed to fetch summary from API, using thread state:", err);
+        console.warn("[ThreadReader] Failed to fetch summary from API:", err);
       }
 
       if (!ignore) {
-        if (thread.analyzedAt) {
-          setSummary({
-            threadId: thread.id,
-            executiveBrief: thread.executiveBrief || thread.aiSummary || "AI Analysis completed.",
-            bulletPoints: [thread.snippet || "Conversation details available in history."],
-            urgencyScore: thread.urgencyScore ?? undefined,
-            importanceScore: thread.importanceScore ?? undefined,
-            actionRequired: thread.actionRequired ?? undefined,
-            analyzedAt: thread.analyzedAt,
-          });
-        } else {
-          setSummary({
-            threadId: thread.id,
-            executiveBrief: "Analysis pending",
-            bulletPoints: ["This thread is queued for Gemini analysis."],
-            analyzedAt: undefined,
-          });
-        }
+        setSummary({
+          threadId: thread.id,
+          executiveBrief: "Analysis pending",
+          bulletPoints: ["This thread is queued for AI analysis."],
+          analyzedAt: undefined,
+        });
       }
     }
 
@@ -71,7 +86,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
     return () => {
       ignore = true;
     };
-  }, [thread]);
+  }, [thread.id, thread.analyzedAt, thread.aiSummary, thread.executiveBrief]);
 
   const handleReanalyze = async () => {
     setIsReanalyzing(true);
@@ -85,6 +100,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
         const data = await res.json();
         if (data.summary) {
           setSummary(data.summary);
+          setCachedSummary(thread.id, data.summary);
           onThreadUpdated();
         }
       }

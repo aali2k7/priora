@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { getValidAccessToken } from "@/lib/gmail-service";
 import { AIService } from "@/lib/ai-service";
 import { cleanupExpiredLocalData } from "@/lib/retention";
+import { isAIAvailable } from "@/lib/groq";
+import { broadcastServerEvent } from "@/lib/events";
 
 interface GmailHeader {
   name: string;
@@ -499,13 +501,6 @@ export async function syncUserGmailInbox(
 
     console.log(`[Gmail Sync] Speed-sync complete: ${threadsSyncedCount} threads synced for user ${userId}.`);
 
-    // 8. Trigger background AI pre-analysis for top unanalyzed threads
-    if (process.env.GEMINI_API_KEY) {
-      AIService.analyzeUnanalyzedThreadsForAccount(gmailAccount.id, 10).catch((aiErr) => {
-        console.error(`[Gmail Sync -> Gemini Analysis] Background analysis warning:`, aiErr);
-      });
-    }
-
     return { success: true, totalSynced: threadsSyncedCount };
   } catch (error) {
     console.error("[Gmail Sync] Critical error in syncUserGmailInbox:", error);
@@ -520,3 +515,291 @@ export async function syncUserGmailInbox(
 
   return syncPromise;
 }
+
+/**
+ * Incremental Delta Synchronization for Real-Time Push Events.
+ * Fetches ONLY the newly arrived / modified message(s) using Gmail's history.list API.
+ * Executes in ~200-500ms and triggers instant Groq AI analysis.
+ */
+export async function syncGmailHistoryDelta(
+  userId: string,
+  targetHistoryId?: string
+): Promise<SyncResult> {
+  try {
+    const accessToken = await getValidAccessToken(userId);
+    if (!accessToken) {
+      return { success: false, totalSynced: 0, message: "No access token" };
+    }
+
+    const account = await prisma.gmailAccount.findFirst({
+      where: { userId },
+      include: { syncState: true },
+    });
+
+    if (!account) {
+      return { success: false, totalSynced: 0, message: "Gmail account not found" };
+    }
+
+    const startHistoryId = account.syncState?.lastHistoryId || account.historyId;
+
+    if (!startHistoryId) {
+      console.log(`[Gmail Delta Sync] No previous historyId for user ${userId}. Running initial sync...`);
+      return await syncUserGmailInbox(userId, { force: true });
+    }
+
+    console.log(`[Gmail Delta Sync] Fetching history delta from historyId ${startHistoryId} (target: ${targetHistoryId || "latest"})...`);
+
+    const queryParams = new URLSearchParams({
+      startHistoryId,
+      historyTypes: "messageAdded",
+    });
+
+    const historyUrl = `https://gmail.googleapis.com/gmail/v1/users/me/history?${queryParams.toString()}`;
+    const historyRes = await fetch(historyUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (historyRes.status === 404) {
+      console.log(`[Gmail Delta Sync] startHistoryId ${startHistoryId} expired on Gmail. Falling back to standard sync.`);
+      return await syncUserGmailInbox(userId, { force: true });
+    }
+
+    if (!historyRes.ok) {
+      const errText = await historyRes.text();
+      console.error(`[Gmail Delta Sync] History API error ${historyRes.status}: ${errText}`);
+      return { success: false, totalSynced: 0, message: `History API error ${historyRes.status}` };
+    }
+
+    const historyData = await historyRes.json();
+    const historyRecords = historyData.history || [];
+    const latestHistoryId = historyData.historyId || targetHistoryId || startHistoryId;
+
+    // Collect modified thread IDs
+    const modifiedThreadIds = new Set<string>();
+
+    for (const record of historyRecords) {
+      if (Array.isArray(record.messagesAdded)) {
+        for (const item of record.messagesAdded) {
+          if (item.message?.threadId) {
+            modifiedThreadIds.add(item.message.threadId);
+          }
+        }
+      }
+      if (Array.isArray(record.messages)) {
+        for (const msg of record.messages) {
+          if (msg.threadId) {
+            modifiedThreadIds.add(msg.threadId);
+          }
+        }
+      }
+    }
+
+    console.log(`[Gmail Delta Sync] Discovered ${modifiedThreadIds.size} modified thread(s) from delta.`);
+
+    // If no specific threads were added in this delta, just update the history ID
+    if (modifiedThreadIds.size === 0) {
+      await prisma.syncState.upsert({
+        where: { accountId: account.id },
+        update: {
+          lastHistoryId: String(latestHistoryId),
+          lastSyncedAt: new Date(),
+        },
+        create: {
+          accountId: account.id,
+          userId,
+          lastHistoryId: String(latestHistoryId),
+          lastSyncedAt: new Date(),
+          status: "completed",
+        },
+      });
+      return { success: true, totalSynced: 0, message: "No new threads in delta" };
+    }
+
+    // Pre-load existing labels
+    const existingLabels = await prisma.label.findMany({
+      where: { accountId: account.id },
+      select: { id: true, gmailLabelId: true },
+    });
+    const labelCache = new Map<string, string>(
+      existingLabels.map((l) => [l.gmailLabelId, l.id])
+    );
+
+    let syncedThreadsCount = 0;
+
+    // Fetch and persist modified threads concurrently
+    const threadFetches = await Promise.allSettled(
+      Array.from(modifiedThreadIds).map(async (tId) => {
+        const tRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${tId}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!tRes.ok) throw new Error(`Thread detail failed: ${tRes.status}`);
+        return (await tRes.json()) as RawGmailThread;
+      })
+    );
+
+    for (const result of threadFetches) {
+      if (result.status !== "fulfilled" || !result.value?.messages?.length) continue;
+      const rawThread = result.value;
+      const messages = rawThread.messages || [];
+      if (messages.length === 0) continue;
+
+      const firstMsg = messages[0];
+      const lastMsg = messages[messages.length - 1];
+
+      const getHeader = (msgs: RawGmailMessage, name: string) => {
+        const headers = msgs.payload?.headers || [];
+        return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+      };
+
+      const subject = getHeader(firstMsg, "Subject") || "(No Subject)";
+      const firstFrom = getHeader(firstMsg, "From");
+      const snippet = firstMsg.snippet || "";
+
+      const isUnread = messages.some((m) => m.labelIds?.includes("UNREAD"));
+      const isArchived = !messages.some((m) => m.labelIds?.includes("INBOX"));
+      const isSnoozed = messages.some((m) => m.labelIds?.includes("SNOOZED"));
+
+      const internalTime = lastMsg.internalDate ? parseInt(lastMsg.internalDate, 10) : Date.now();
+      const lastMessageAt = new Date(internalTime);
+      const firstInternalTime = firstMsg.internalDate ? parseInt(firstMsg.internalDate, 10) : Date.now();
+
+      // Upsert Thread
+      const dbThread = await prisma.thread.upsert({
+        where: {
+          accountId_gmailThreadId: {
+            accountId: account.id,
+            gmailThreadId: rawThread.id,
+          },
+        },
+        update: {
+          subject,
+          snippet,
+          isUnread,
+          isArchived,
+          isSnoozed,
+          lastMessageAt,
+          internalDate: new Date(firstInternalTime),
+        },
+        create: {
+          accountId: account.id,
+          gmailThreadId: rawThread.id,
+          subject,
+          snippet,
+          isUnread,
+          isArchived,
+          isSnoozed,
+          lastMessageAt,
+          internalDate: new Date(firstInternalTime),
+          priority: "normal",
+          category: "fyi",
+        },
+      });
+
+      // Upsert messages in parallel
+      await Promise.all(
+        messages.map(async (msg) => {
+          const msgHeaders = msg.payload?.headers || [];
+          const getMHeader = (n: string) =>
+            msgHeaders.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
+
+          const mFrom = getMHeader("From") || firstFrom;
+          const { name: mFromName, email: mFromEmail } = parseEmailAddress(mFrom);
+          const mTo = getMHeader("To");
+          const { name: mToName, email: mToEmail } = parseEmailAddress(mTo);
+          const mSubject = getMHeader("Subject") || subject;
+          const mSnippet = msg.snippet || "";
+          const plainTextBody = extractPlainTextBody(msg.payload) || mSnippet;
+
+          const mInternalTime = msg.internalDate ? parseInt(msg.internalDate, 10) : Date.now();
+          const mDate = new Date(mInternalTime);
+
+          await prisma.email.upsert({
+            where: {
+              accountId_gmailId: {
+                accountId: account.id,
+                gmailId: msg.id,
+              },
+            },
+            update: {
+              subject: mSubject,
+              fromEmail: mFromEmail,
+              fromName: mFromName,
+              toEmail: mToEmail,
+              toName: mToName,
+              snippet: mSnippet,
+              bodyText: plainTextBody,
+              internalDate: mDate,
+              isUnread: msg.labelIds?.includes("UNREAD") || false,
+            },
+            create: {
+              accountId: account.id,
+              gmailId: msg.id,
+              gmailThreadId: rawThread.id,
+              threadId: dbThread.id,
+              subject: mSubject,
+              fromEmail: mFromEmail,
+              fromName: mFromName,
+              toEmail: mToEmail,
+              toName: mToName,
+              snippet: mSnippet,
+              bodyText: plainTextBody,
+              internalDate: mDate,
+              isUnread: msg.labelIds?.includes("UNREAD") || false,
+            },
+          });
+        })
+      );
+
+      // Trigger instant Groq AI analysis on the modified thread in background
+      if (isAIAvailable()) {
+        AIService.analyzeThreadWithGemini(dbThread.id, true).catch((aiErr) => {
+          console.error(`[Gmail Delta Sync -> AI] Error analyzing new thread ${dbThread.id}:`, aiErr);
+        });
+      }
+
+      syncedThreadsCount++;
+    }
+
+    // Update SyncState and history ID
+    await prisma.syncState.upsert({
+      where: { accountId: account.id },
+      update: {
+        lastHistoryId: String(latestHistoryId),
+        lastSyncedAt: new Date(),
+        status: "completed",
+      },
+      create: {
+        accountId: account.id,
+        userId,
+        lastHistoryId: String(latestHistoryId),
+        lastSyncedAt: new Date(),
+        status: "completed",
+      },
+    });
+
+    await prisma.gmailAccount.update({
+      where: { id: account.id },
+      data: {
+        lastSyncedAt: new Date(),
+        historyId: String(latestHistoryId),
+      },
+    });
+
+    console.log(`[Gmail Delta Sync] Real-time delta sync complete. ${syncedThreadsCount} thread(s) updated.`);
+
+    // Broadcast real-time event to open client browser tabs
+    broadcastServerEvent({
+      type: "new-email",
+      userId,
+      emailAddress: account.email,
+      timestamp: Date.now(),
+    });
+
+    return { success: true, totalSynced: syncedThreadsCount };
+  } catch (error) {
+    console.error("[Gmail Delta Sync] Critical error:", error);
+    return { success: false, totalSynced: 0, message: String(error) };
+  }
+}
+
