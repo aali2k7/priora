@@ -5,7 +5,7 @@ import { AIDraftResponse, ToneModifier } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
-import { Sparkles, Send, RefreshCw } from "lucide-react";
+import { Send, RefreshCw } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
 
 interface AIDraftComposerProps {
@@ -44,12 +44,12 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
       if (isMounted) {
         setDraft({
           threadId,
-          intentStrategy: `Strategy: Responding in ${activeTone} tone.`,
-          draftText: "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest,\nAlex Mercer",
+          intentStrategy: `Responding with ${activeTone} style`,
+          draftText: "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali",
           suggestedTone: activeTone,
           lastUpdated: "Just now",
         });
-        setDraftText("Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest,\nAlex Mercer");
+        setDraftText("Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali");
         setIsLoading(false);
       }
     }
@@ -77,53 +77,54 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 p-5 animate-pulse space-y-3 shadow-2xs">
-        <div className="h-4 w-48 bg-slate-200 dark:bg-slate-800 rounded" />
-        <div className="h-20 bg-slate-200 dark:bg-slate-800 rounded" />
+      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 space-y-2">
+        <div className="flex items-center space-x-2 text-xs text-[var(--text-secondary)]">
+          <RefreshCw className="h-3 w-3 animate-spin text-[#3F5F8F]" />
+          <span>Generating AI reply draft...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-indigo-500/30 bg-white/90 dark:bg-slate-900/90 p-5 shadow-card dark:shadow-panel space-y-4 transition-all">
-      {/* Draft Header & Strategy Tag */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-        <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-          <Sparkles className="h-4 w-4" />
-          <span>AI Suggested Reply</span>
+    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 space-y-3">
+      {/* Draft Header & Tone Selection */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-semibold text-[#3F5F8F] dark:text-[#7CA1D8] uppercase tracking-wider">
+            Reply Draft
+          </span>
+          {draft && (
+            <span className="text-[11px] text-[var(--text-muted)] italic">
+              • {draft.intentStrategy}
+            </span>
+          )}
         </div>
 
-        {draft && (
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
-            {draft.intentStrategy}
-          </p>
-        )}
-      </div>
-
-      {/* Tone Adjustment Pills */}
-      <div className="flex items-center space-x-2 overflow-x-auto custom-scrollbar pb-1">
-        <span className="text-[11px] text-slate-500 font-medium shrink-0">Adjust Tone:</span>
-        {[
-          { id: "concise", label: "Concise" },
-          { id: "formal", label: "Formal" },
-          { id: "direct_refusal", label: "Direct Refusal" },
-          { id: "request_call", label: "Request Call" },
-        ].map((t) => {
-          const isSelected = activeTone === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => handleToneSelect(t.id as ToneModifier)}
-              className={`px-3 py-1 text-[11px] font-medium rounded-full border transition-all cursor-pointer whitespace-nowrap ${
-                isSelected
-                  ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs font-semibold"
-                  : "bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700/60 hover:text-slate-900 dark:hover:text-slate-200"
-              }`}
-            >
-              {t.label}
-            </button>
-          );
-        })}
+        {/* Tone Selector */}
+        <div className="flex items-center space-x-1">
+          {[
+            { id: "concise", label: "Concise" },
+            { id: "formal", label: "Formal" },
+            { id: "direct_refusal", label: "Decline" },
+            { id: "request_call", label: "Call" },
+          ].map((t) => {
+            const isSelected = activeTone === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => handleToneSelect(t.id as ToneModifier)}
+                className={`px-2 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
+                  isSelected
+                    ? "bg-[var(--bg-surface-selected)] text-[#3F5F8F] dark:text-[#7CA1D8] font-semibold border border-[var(--border-subtle)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]"
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Draft Text Area */}
@@ -131,39 +132,37 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
         value={draftText}
         onChange={(e) => setDraftText(e.target.value)}
         placeholder="Type or edit your response..."
-        className="min-h-[120px] font-sans text-xs sm:text-sm text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800"
+        className="min-h-[100px] font-sans text-xs text-[var(--text-primary)] bg-[var(--bg-canvas)] border-[var(--border-subtle)]"
       />
 
       {/* Actions Toolbar */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center space-x-1.5 text-[11px] text-slate-500">
+      <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center space-x-1 text-[11px] text-[var(--text-muted)]">
           <span>Press</span>
           <ShortcutKey>⌘</ShortcutKey>
           <ShortcutKey>Enter</ShortcutKey>
           <span>to send</span>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSend}
-            disabled={isSending}
-            className="space-x-1.5"
-          >
-            {isSending ? (
-              <>
-                <RefreshCw className="h-3.5 w-3.5 animate-spin text-white" />
-                <span>Sending...</span>
-              </>
-            ) : (
-              <>
-                <Send className="h-3.5 w-3.5" />
-                <span>Send Email</span>
-              </>
-            )}
-          </Button>
-        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleSend}
+          disabled={isSending}
+          className="space-x-1.5"
+        >
+          {isSending ? (
+            <>
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              <span>Sending...</span>
+            </>
+          ) : (
+            <>
+              <Send className="h-3 w-3" />
+              <span>Send Reply</span>
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );

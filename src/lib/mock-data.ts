@@ -3,10 +3,10 @@ import { AISummary, AIDraftResponse, ExecutiveBriefing } from "@/types/ai";
 
 export const MOCK_EXECUTIVE_USER = {
   id: "usr_exec_001",
-  name: "Dr. Aris Thorne",
-  email: "program.director@university.edu.in",
-  title: "Program Director & Executive Dean",
-  company: "School of Computer Science & Engineering",
+  name: "Aali",
+  email: "aalirnc@gmail.com",
+  title: "Executive",
+  company: "Priora",
   avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
 };
 

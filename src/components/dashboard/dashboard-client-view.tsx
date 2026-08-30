@@ -5,7 +5,7 @@ import { EmailThread } from "@/types/email";
 import { ExecutiveBriefing } from "@/types/ai";
 import { BriefingBanner } from "./briefing-banner";
 import { HighPriorityFeed } from "./high-priority-feed";
-import { Sparkles, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 interface DashboardClientViewProps {
   initialBriefing: ExecutiveBriefing;
@@ -70,48 +70,49 @@ export function DashboardClientView({ initialBriefing }: DashboardClientViewProp
 
   if (isLoading || (isSyncing && threads.length === 0)) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md p-8 text-center shadow-elevation">
-        <div className="flex flex-col items-center space-y-4 max-w-sm">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600/10 dark:bg-indigo-600/20 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 animate-pulse">
-            <Sparkles className="h-7 w-7" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              Syncing Executive Dashboard
+      <div className="flex h-64 flex-col items-center justify-center p-8 text-center">
+        <div className="flex flex-col items-center space-y-2.5 max-w-sm">
+          <RefreshCw className="h-5 w-5 animate-spin text-[#3F5F8F]" />
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+              Loading Overview
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Fetching real Gmail threads from Neon PostgreSQL database...
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Syncing live dataset from local cache...
             </p>
-          </div>
-          <div className="flex items-center space-x-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            <span>Gmail REST API Sync active...</span>
           </div>
         </div>
       </div>
     );
   }
 
-  const urgentThreads = threads.filter((t) => t.priority === "urgent" || t.category === "action_required");
+  const urgentThreads = threads.filter(
+    (t) =>
+      !t.isArchived &&
+      (t.priority === "urgent" ||
+        t.category === "action_required" ||
+        (typeof t.urgencyScore === "number" && t.urgencyScore >= 70))
+  );
   const urgentCount = urgentThreads.length;
-  const pendingCount = threads.filter((t) => t.isUnread).length;
+  const pendingCount = threads.filter((t) => !t.isArchived && t.isUnread).length;
 
   const dynamicBriefing: ExecutiveBriefing = {
     ...initialBriefing,
-    digestSummary: threads.length > 0
-      ? `You have ${urgentCount} urgent priority items requiring your attention across ${threads.length} total synced threads.`
-      : initialBriefing.digestSummary,
+    digestSummary:
+      threads.length > 0
+        ? `You have ${urgentCount} urgent priority items across ${threads.length} active threads.`
+        : initialBriefing.digestSummary,
     urgentItemCount: urgentCount,
     waitingOnCount: pendingCount,
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto">
       {/* 1. Executive Briefing Banner */}
       <BriefingBanner briefing={dynamicBriefing} />
 
       {/* 2. Priority Feed Overview */}
-      <HighPriorityFeed threads={threads} />
+      <HighPriorityFeed threads={urgentThreads.length > 0 ? urgentThreads : threads} />
     </div>
   );
 }

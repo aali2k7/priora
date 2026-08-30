@@ -2,8 +2,7 @@
 
 import React from "react";
 import { EmailThread } from "@/types/email";
-import { Badge } from "@/components/ui/badge";
-import { Search, Sparkles, Inbox, Zap, Archive, Clock } from "lucide-react";
+import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type ViewMode = "inbox" | "focused" | "archived";
@@ -43,59 +42,58 @@ export function ThreadFeedList({
 
   const filteredThreads = threads.filter((t) => {
     const query = searchQuery.toLowerCase();
-    const matchesSearch =
+    return (
       t.subject.toLowerCase().includes(query) ||
       t.snippet.toLowerCase().includes(query) ||
-      t.participants.some((p) => p.name.toLowerCase().includes(query) || p.email.toLowerCase().includes(query));
-
-    return matchesSearch;
+      t.participants.some(
+        (p) => p.name.toLowerCase().includes(query) || p.email.toLowerCase().includes(query)
+      )
+    );
   });
 
   return (
-    <div className="flex flex-col h-full border-r border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/60 min-w-0">
-      {/* Primary View Switcher: INBOX vs FOCUSED vs ARCHIVED */}
-      <div className="p-3 space-y-2.5 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/60 dark:bg-slate-900/60">
-        <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+    <div className="flex flex-col h-full bg-[var(--bg-surface)] min-w-0 select-none">
+      {/* Top Header Section & View Switcher */}
+      <div className="p-3 border-b border-[var(--border-subtle)] space-y-2.5 bg-[var(--bg-surface)]">
+        {/* Primary View Switcher: Inbox | Focused | Archived */}
+        <div className="flex items-center p-0.5 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
           <button
             onClick={() => onViewModeChange("inbox")}
             className={cn(
-              "flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+              "flex-1 py-1 px-2 text-center text-xs rounded transition-colors cursor-pointer font-medium",
               viewMode === "inbox"
-                ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs font-semibold"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             )}
           >
-            <Inbox className="h-3.5 w-3.5" />
             <span>Inbox</span>
-            <span className="text-[10px] opacity-70">({totalInboxCount})</span>
+            <span className="text-[10px] ml-1 text-[var(--text-muted)]">({totalInboxCount})</span>
           </button>
 
           <button
             onClick={() => onViewModeChange("focused")}
             className={cn(
-              "flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+              "flex-1 py-1 px-2 text-center text-xs rounded transition-colors cursor-pointer font-medium",
               viewMode === "focused"
-                ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                ? "bg-[var(--bg-surface)] text-[#3F5F8F] dark:text-[#7CA1D8] shadow-xs font-semibold"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             )}
           >
-            <Zap className="h-3.5 w-3.5" />
             <span>Focused</span>
-            <span className="text-[10px] opacity-70">({totalFocusedCount})</span>
+            <span className="text-[10px] ml-1 text-[var(--text-muted)]">({totalFocusedCount})</span>
           </button>
 
           <button
             onClick={() => onViewModeChange("archived")}
             className={cn(
-              "flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+              "flex-1 py-1 px-2 text-center text-xs rounded transition-colors cursor-pointer font-medium",
               viewMode === "archived"
-                ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs font-semibold"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             )}
           >
-            <Archive className="h-3.5 w-3.5" />
             <span>Archived</span>
-            <span className="text-[10px] opacity-70">({totalArchivedCount})</span>
+            <span className="text-[10px] ml-1 text-[var(--text-muted)]">({totalArchivedCount})</span>
           </button>
         </div>
 
@@ -106,7 +104,7 @@ export function ThreadFeedList({
               [
                 { id: "all", label: "All Focused" },
                 { id: "urgent", label: "Urgent" },
-                { id: "action_needed", label: "Action Needed" },
+                { id: "action_needed", label: "Needs Action" },
                 { id: "vip", label: "VIP" },
               ] as const
             ).map((filter) => (
@@ -114,10 +112,10 @@ export function ThreadFeedList({
                 key={filter.id}
                 onClick={() => onFocusedFilterChange(filter.id)}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 transition-colors cursor-pointer",
+                  "px-2 py-0.5 rounded text-[11px] font-medium shrink-0 transition-colors cursor-pointer",
                   focusedFilter === filter.id
-                    ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-semibold"
-                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                    ? "bg-[var(--bg-surface-selected)] text-[#3F5F8F] dark:text-[#7CA1D8] font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 )}
               >
                 {filter.label}
@@ -131,17 +129,17 @@ export function ThreadFeedList({
             {(
               [
                 { id: "all", label: "All Mail" },
-                { id: "unread", label: "Unread Only" },
+                { id: "unread", label: "Unread" },
               ] as const
             ).map((filter) => (
               <button
                 key={filter.id}
                 onClick={() => onInboxFilterChange(filter.id)}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 transition-colors cursor-pointer",
+                  "px-2 py-0.5 rounded text-[11px] font-medium shrink-0 transition-colors cursor-pointer",
                   inboxFilter === filter.id
-                    ? "bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold"
-                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                    ? "bg-[var(--bg-surface-selected)] text-[#3F5F8F] dark:text-[#7CA1D8] font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 )}
               >
                 {filter.label}
@@ -150,87 +148,105 @@ export function ThreadFeedList({
           </div>
         )}
 
-        {/* Search Bar */}
+        {/* Search Input */}
         <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-[var(--text-muted)]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search in ${viewMode}...`}
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus-ring shadow-2xs transition-colors"
+            placeholder={`Filter ${viewMode}...`}
+            className="w-full rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] pl-8 pr-2.5 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-ring transition-colors"
           />
         </div>
       </div>
 
-      {/* Thread List Items */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-100 dark:divide-slate-800/40">
+      {/* Structured List of Emails */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-[var(--border-subtle)]">
         {filteredThreads.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-500">
+          <div className="p-8 text-center text-xs text-[var(--text-muted)]">
             {viewMode === "focused"
-              ? "No focused threads match active filter. Threads analyzed with high priority or action items will appear here."
-              : "No threads found in active view."}
+              ? "No focused emails matching active filter."
+              : "No emails in this view."}
           </div>
         ) : (
           filteredThreads.map((thread) => {
             const isSelected = thread.id === activeThreadId;
+            const senderName = thread.participants[0]?.name || "Unknown";
+            const isUrgent = thread.priority === "urgent" || (typeof thread.urgencyScore === "number" && thread.urgencyScore >= 75);
+            const isAction = thread.actionRequired === true || thread.category === "action_required";
+            const isVip = thread.category === "vip" || thread.participants.some((p) => p.isVIP);
 
             return (
               <button
                 key={thread.id}
                 onClick={() => onSelectThread(thread.id)}
                 className={cn(
-                  "w-full text-left p-3.5 transition-all duration-150 focus-ring relative group cursor-pointer",
+                  "w-full text-left p-3 transition-colors duration-100 relative group cursor-pointer",
                   isSelected
-                    ? "bg-indigo-500/10 dark:bg-slate-800/90 shadow-2xs"
-                    : "hover:bg-slate-100/60 dark:hover:bg-slate-900/70"
+                    ? "bg-[var(--bg-surface-selected)]"
+                    : "hover:bg-[var(--bg-surface-hover)] bg-[var(--bg-surface)]"
                 )}
               >
+                {/* Thin Left Selection Accent Indicator */}
                 {isSelected && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-500" />
+                  <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#3F5F8F] dark:bg-[#7CA1D8]" />
                 )}
 
+                {/* Top Row: Sender + Indicators + Timestamp */}
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <span className={cn(
-                      "text-xs truncate",
-                      thread.isUnread ? "font-bold text-slate-900 dark:text-slate-100" : "font-medium text-slate-700 dark:text-slate-300"
-                    )}>
-                      {thread.participants[0]?.name || "Sender"}
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    {/* Unread dot */}
+                    {thread.isUnread && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#3F5F8F] dark:bg-[#7CA1D8] shrink-0" />
+                    )}
+
+                    <span
+                      className={cn(
+                        "text-xs truncate",
+                        thread.isUnread
+                          ? "font-bold text-[var(--text-primary)]"
+                          : "font-medium text-[var(--text-primary)]"
+                      )}
+                    >
+                      {senderName}
                     </span>
-                    {thread.priority === "urgent" && <Badge variant="urgent">Urgent</Badge>}
-                    {thread.category === "vip" && <Badge variant="vip">VIP</Badge>}
-                    {thread.actionRequired && <Badge variant="default">Action</Badge>}
+
+                    {/* Tiny Semantic Status Dots */}
+                    {isUrgent && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#B83A3A] shrink-0" title="Urgent" />
+                    )}
+                    {isAction && !isUrgent && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#A56B20] shrink-0" title="Action Needed" />
+                    )}
+                    {isVip && (
+                      <span className="text-[9px] font-mono px-1 rounded bg-[var(--status-ai-subtle)] text-[#526B9E] shrink-0">
+                        VIP
+                      </span>
+                    )}
                   </div>
-                  <span className="text-[10px] text-slate-400 shrink-0">
+
+                  <span className="text-[11px] text-[var(--text-muted)] shrink-0 font-normal">
                     {thread.lastMessageTimestamp}
                   </span>
                 </div>
 
-                <p className={cn(
-                  "text-xs truncate mt-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors",
-                  thread.isUnread ? "font-semibold text-slate-900 dark:text-slate-100" : "font-normal text-slate-700 dark:text-slate-300"
-                )}>
+                {/* Subject Line */}
+                <p
+                  className={cn(
+                    "text-xs truncate mt-0.5",
+                    thread.isUnread
+                      ? "font-semibold text-[var(--text-primary)]"
+                      : "font-normal text-[var(--text-primary)]"
+                  )}
+                >
                   {thread.subject}
                 </p>
 
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 leading-relaxed font-normal">
+                {/* Snippet Line */}
+                <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1 mt-0.5 font-normal leading-relaxed">
                   {thread.snippet}
                 </p>
-
-                <div className="flex items-center space-x-2 mt-2 pt-1">
-                  {thread.analyzedAt ? (
-                    <span className="inline-flex items-center text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                      <Sparkles className="h-2.5 w-2.5 mr-1 text-emerald-600 dark:text-emerald-400" />
-                      AI Analyzed {typeof thread.urgencyScore === "number" ? `• ${thread.urgencyScore}/100` : ""}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
-                      <Clock className="h-2.5 w-2.5 mr-1 text-slate-400" />
-                      Analysis pending
-                    </span>
-                  )}
-                </div>
               </button>
             );
           })

@@ -1,33 +1,42 @@
 "use client";
 
 import React from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { EmailThread } from "@/types/email";
 import { ThreadFeedList, ViewMode, FocusedSubFilter, InboxSubFilter } from "./thread-feed-list";
 import { ThreadReader } from "./thread-reader";
-import { Inbox, ArrowLeft, RefreshCw, Sparkles } from "lucide-react";
+import { Inbox, ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ThreePaneWorkspaceProps {
   initialThreads?: EmailThread[];
   initialThreadId?: string;
   initialAction?: string;
+  initialView?: ViewMode;
 }
 
 export function ThreePaneWorkspace({
   initialThreads = [],
   initialThreadId,
   initialAction,
+  initialView = "inbox",
 }: ThreePaneWorkspaceProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlView = (searchParams.get("view") as ViewMode) || null;
+
   const [threads, setThreads] = React.useState<EmailThread[]>(initialThreads);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSyncing, setIsSyncing] = React.useState(false);
-  const [viewMode, setViewMode] = React.useState<ViewMode>("inbox");
+  const [internalViewMode, setInternalViewMode] = React.useState<ViewMode>(initialView);
+  const viewMode = urlView || internalViewMode;
+
   const [inboxFilter, setInboxFilter] = React.useState<InboxSubFilter>("all");
   const [focusedFilter, setFocusedFilter] = React.useState<FocusedSubFilter>("all");
   const [activeThreadId, setActiveThreadId] = React.useState<string>(initialThreadId || "");
   const [isMobileViewThread, setIsMobileViewThread] = React.useState(!!initialThreadId);
 
-  // Fetch threads on workspace mount
+  // Fetch threads on mount
   React.useEffect(() => {
     let ignore = false;
 
@@ -39,13 +48,16 @@ export function ThreePaneWorkspace({
           setIsSyncing(!!data.isSyncing);
           if (data.threads) {
             setThreads(data.threads);
-            if (data.threads.length > 0 && (!initialThreadId || !data.threads.some((t: EmailThread) => t.id === initialThreadId))) {
+            if (
+              data.threads.length > 0 &&
+              (!initialThreadId || !data.threads.some((t: EmailThread) => t.id === initialThreadId))
+            ) {
               setActiveThreadId(data.threads[0].id);
             }
           }
         }
       } catch (err) {
-        console.error("[Workspace] Error loading threads from database:", err);
+        console.error("[Workspace] Error loading threads:", err);
       } finally {
         if (!ignore) setIsLoading(false);
       }
@@ -58,7 +70,7 @@ export function ThreePaneWorkspace({
     };
   }, [initialThreadId]);
 
-  // Poll while syncing
+  // Poll while background syncing
   React.useEffect(() => {
     if (!isSyncing) return;
 
@@ -84,7 +96,7 @@ export function ThreePaneWorkspace({
     };
   }, [isSyncing]);
 
-  // Compute Focused qualification from REAL persisted AI analysis
+  // Qualification for FOCUSED view derived from real persisted AI analysis
   const isThreadFocused = (t: EmailThread): boolean => {
     if (t.isArchived) return false;
     if (!t.analyzedAt) return false;
@@ -92,10 +104,13 @@ export function ThreePaneWorkspace({
     const hasHighUrgency = typeof t.urgencyScore === "number" && t.urgencyScore >= 60;
     const hasHighImportance = typeof t.importanceScore === "number" && t.importanceScore >= 60;
     const isUrgentPriority = t.priority === "urgent" || t.priority === "high";
-    const isActionCategory = t.category === "action_required" || t.category === "deadline_today" || t.category === "vip";
+    const isActionCategory =
+      t.category === "action_required" || t.category === "deadline_today" || t.category === "vip";
     const hasActionRequired = t.actionRequired === true;
 
-    return hasHighUrgency || hasHighImportance || isUrgentPriority || isActionCategory || hasActionRequired;
+    return (
+      hasHighUrgency || hasHighImportance || isUrgentPriority || isActionCategory || hasActionRequired
+    );
   };
 
   // Filter threads based on active viewMode and subFilters
@@ -107,10 +122,16 @@ export function ThreePaneWorkspace({
     if (viewMode === "focused") {
       const focusedThreads = threads.filter(isThreadFocused);
       if (focusedFilter === "urgent") {
-        return focusedThreads.filter((t) => t.priority === "urgent" || (typeof t.urgencyScore === "number" && t.urgencyScore >= 75));
+        return focusedThreads.filter(
+          (t) =>
+            t.priority === "urgent" ||
+            (typeof t.urgencyScore === "number" && t.urgencyScore >= 75)
+        );
       }
       if (focusedFilter === "action_needed") {
-        return focusedThreads.filter((t) => t.actionRequired === true || t.category === "action_required");
+        return focusedThreads.filter(
+          (t) => t.actionRequired === true || t.category === "action_required"
+        );
       }
       if (focusedFilter === "vip") {
         return focusedThreads.filter((t) => t.category === "vip" || t.participants.some((p) => p.isVIP));
@@ -126,10 +147,12 @@ export function ThreePaneWorkspace({
     return inboxThreads;
   }, [threads, viewMode, inboxFilter, focusedFilter]);
 
-  const activeThread = filteredThreads.find((t) => t.id === activeThreadId) || filteredThreads[0];
+  const activeThread =
+    filteredThreads.find((t) => t.id === activeThreadId) || filteredThreads[0];
 
   const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
+    setInternalViewMode(mode);
+    router.replace(`/inbox?view=${mode}`, { scroll: false });
     const targetThreads = threads.filter((t) => {
       if (mode === "archived") return t.isArchived;
       if (mode === "focused") return isThreadFocused(t);
@@ -189,22 +212,16 @@ export function ThreePaneWorkspace({
   // Syncing or Initial Loading State
   if (isLoading || (isSyncing && threads.length === 0)) {
     return (
-      <div className="flex h-[calc(100vh-56px-3rem)] flex-col items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md p-8 text-center shadow-elevation">
-        <div className="flex flex-col items-center space-y-4 max-w-sm">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600/10 dark:bg-indigo-600/20 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 animate-pulse">
-            <Sparkles className="h-7 w-7" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              Syncing Live Gmail Inbox
+      <div className="flex h-full flex-col items-center justify-center p-8 text-center bg-[var(--bg-canvas)]">
+        <div className="flex flex-col items-center space-y-3 max-w-sm">
+          <RefreshCw className="h-5 w-5 animate-spin text-[#3F5F8F]" />
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+              Loading Inbox
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Synchronizing 15-day rolling working dataset into local PostgreSQL cache...
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Fetching 15-day rolling working dataset from local storage...
             </p>
-          </div>
-          <div className="flex items-center space-x-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            <span>Connecting to Gmail REST API...</span>
           </div>
         </div>
       </div>
@@ -212,10 +229,10 @@ export function ThreePaneWorkspace({
   }
 
   return (
-    <div className="flex h-[calc(100vh-56px-3rem)] rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-950/80 backdrop-blur-md overflow-hidden shadow-elevation transition-colors duration-200">
-      {/* Pane 2: Thread Feed List */}
+    <div className="flex h-full w-full bg-[var(--bg-canvas)] overflow-hidden">
+      {/* Left Pane: Thread Feed List (Table-like, Enterprise Proportions) */}
       <div
-        className={`w-full lg:w-[380px] shrink-0 ${
+        className={`w-full lg:w-[380px] xl:w-[420px] shrink-0 h-full border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] ${
           isMobileViewThread ? "hidden lg:block" : "block"
         }`}
       >
@@ -235,24 +252,24 @@ export function ThreePaneWorkspace({
         />
       </div>
 
-      {/* Pane 3: Active Thread Reader & AI Workspace */}
+      {/* Right Pane: Active Thread Reader & Conversation Timeline */}
       <div
-        className={`flex-1 min-w-0 ${
+        className={`flex-1 min-w-0 h-full bg-[var(--bg-canvas)] overflow-hidden ${
           !isMobileViewThread ? "hidden lg:block" : "block"
         }`}
       >
         {activeThread ? (
           <div className="flex flex-col h-full">
             {/* Mobile Back Button Header */}
-            <div className="lg:hidden p-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center">
+            <div className="lg:hidden p-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex items-center">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsMobileViewThread(false)}
-                className="text-xs text-slate-700 dark:text-slate-300"
+                className="text-xs text-[var(--text-secondary)]"
               >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                <span>Back to Feed</span>
+                <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                <span>Back to list</span>
               </Button>
             </div>
 
@@ -263,11 +280,11 @@ export function ThreePaneWorkspace({
             />
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center p-8 text-center text-slate-500">
-            <Inbox className="h-10 w-10 text-slate-400 dark:text-slate-600 mb-3" />
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No Thread Selected</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm">
-              Select an email from the feed list to view AI summaries and draft responses.
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center text-[var(--text-muted)] bg-[var(--bg-canvas)]">
+            <Inbox className="h-8 w-8 text-[var(--text-muted)] mb-2" />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">No conversation selected</p>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 max-w-sm">
+              Select an email thread from the left list to read messages and AI summaries.
             </p>
           </div>
         )}

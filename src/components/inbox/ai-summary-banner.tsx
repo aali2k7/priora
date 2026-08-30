@@ -1,5 +1,7 @@
+"use client";
+
 import React from "react";
-import { Sparkles, AlertCircle, CheckCircle2, Clock, FileText, UserCheck, ShieldCheck, Award, RefreshCw } from "lucide-react";
+import { Clock, RefreshCw } from "lucide-react";
 import { AISummary } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 
@@ -16,19 +18,20 @@ export function AISummaryBanner({ summary, onReanalyze, isReanalyzing }: AISumma
   const recAction = isAnalyzed ? summary.recommendedAction : undefined;
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/80 p-6 shadow-card dark:shadow-glass space-y-6 transition-all">
-      {/* 1. Header: Title + AI Status + Urgency Score + Reading Time Saved */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-slate-100 dark:border-slate-800/60">
-        <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-          <Sparkles className="h-4 w-4" />
-          <span>Executive Brief & Decision Engine</span>
+    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 space-y-3.5">
+      {/* 1. Header: AI Brief Label + Re-analyze Action */}
+      <div className="flex items-center justify-between pb-2 border-b border-[var(--border-subtle)]">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-semibold text-[#3F5F8F] dark:text-[#7CA1D8] uppercase tracking-wider">
+            AI Brief
+          </span>
           {isAnalyzed ? (
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-              Gemini AI
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">
+              • Persisted analysis
             </span>
           ) : (
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-              Pending
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">
+              • Pending
             </span>
           )}
         </div>
@@ -40,182 +43,105 @@ export function AISummaryBanner({ summary, onReanalyze, isReanalyzing }: AISumma
               size="sm"
               onClick={onReanalyze}
               disabled={isReanalyzing}
-              className="text-[11px] h-7 px-2.5 text-slate-600 dark:text-slate-300"
+              className="text-[11px] h-6 px-2 text-[var(--text-secondary)]"
               title="Request fresh Gemini AI analysis"
             >
-              <RefreshCw className={`h-3 w-3 mr-1 ${isReanalyzing ? "animate-spin text-indigo-500" : "text-slate-400"}`} />
-              <span>{isReanalyzing ? "Analyzing..." : isAnalyzed ? "Re-analyze" : "Analyze with AI"}</span>
+              <RefreshCw className={`h-3 w-3 mr-1 ${isReanalyzing ? "animate-spin text-[#3F5F8F]" : "text-[var(--text-muted)]"}`} />
+              <span>{isReanalyzing ? "Analyzing..." : isAnalyzed ? "Re-analyze" : "Analyze"}</span>
             </Button>
           )}
 
-          {isAnalyzed && summary.readingTimeSaved && (
-            <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
-              {summary.readingTimeSaved}
+          {isAnalyzed && typeof summary.urgencyScore === "number" && (
+            <span className="text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--bg-canvas)] px-2 py-0.5 rounded border border-[var(--border-subtle)]">
+              Score: {summary.urgencyScore}/100
             </span>
           )}
-
-          {isAnalyzed && typeof summary.urgencyScore === "number" ? (
-            <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
-              Urgency: {summary.urgencyScore}/100
-            </span>
-          ) : !isAnalyzed ? (
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
-              Analysis pending
-            </span>
-          ) : null}
         </div>
       </div>
 
       {/* 2. Executive Brief Statement */}
       {isAnalyzed ? (
-        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-relaxed">
+        <p className="text-xs text-[var(--text-primary)] leading-relaxed font-normal">
           {summary.executiveBrief}
         </p>
       ) : (
-        <div className="flex items-center space-x-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 p-4 text-xs text-slate-600 dark:text-slate-300">
-          <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-          <div>
-            <p className="font-semibold text-xs text-slate-800 dark:text-slate-200">Analysis Pending</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              Click &quot;Analyze with AI&quot; above to run real-time Gemini structured extraction, urgency scoring, and ghostwriting recommendations.
-            </p>
-          </div>
+        <div className="flex items-center space-x-2 py-1 text-xs text-[var(--text-secondary)]">
+          <Clock className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+          <span>Analysis pending. Click &quot;Analyze&quot; to run Gemini structured extraction.</span>
         </div>
       )}
 
-      {/* 3. Key Decision Required (If Any) */}
+      {/* 3. Key Decision Needed (If Any) */}
       {isAnalyzed && summary.keyDecisionRequired && (
-        <div className="flex items-start space-x-3 rounded-xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 p-4 text-xs text-amber-900 dark:text-amber-300">
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <span className="font-semibold text-xs text-amber-800 dark:text-amber-300 block">Key Decision Needed</span>
-            <p className="text-xs text-amber-900/90 dark:text-amber-300/90 font-normal leading-relaxed">{summary.keyDecisionRequired}</p>
-          </div>
+        <div className="p-2.5 rounded bg-[var(--status-action-subtle)] border border-[var(--status-action-border)] space-y-0.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--status-action)] block">
+            Key Decision Needed
+          </span>
+          <p className="text-xs text-[var(--text-primary)] leading-relaxed font-normal">
+            {summary.keyDecisionRequired}
+          </p>
         </div>
       )}
 
-      {/* 4. Extracted Information Panel */}
-      {isAnalyzed && keyInfo && (
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
-            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-2">
-              <UserCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-              <span>Extracted Key Information</span>
-            </h4>
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60 font-normal">
-              Confidence {keyInfo.confidenceScore || 95}%
-            </span>
-          </div>
+      {/* 4. Action Required / Recommended Action */}
+      {isAnalyzed && recAction && (
+        <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] block">
+            Recommended Action
+          </span>
+          <p className="text-xs font-semibold text-[var(--text-primary)]">
+            {recAction.actionTitle}
+          </p>
+          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+            {recAction.reasoning}
+          </p>
+        </div>
+      )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs pt-1">
+      {/* 5. Key Extracted Context (If Available) */}
+      {isAnalyzed && keyInfo && (keyInfo.studentName || keyInfo.requestedDates || keyInfo.program || keyInfo.reason) && (
+        <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] block">
+            Extracted Context
+          </span>
+          <div className="grid grid-cols-2 gap-2 text-xs">
             {keyInfo.studentName && (
-              <div className="space-y-0.5">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal block">Contact / Person</span>
-                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{keyInfo.studentName}</span>
+              <div>
+                <span className="text-[10px] text-[var(--text-muted)] block">Contact</span>
+                <span className="font-medium text-[var(--text-primary)]">{keyInfo.studentName}</span>
               </div>
             )}
-
-            {keyInfo.studentId && (
-              <div className="space-y-0.5">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal block">Identifier / Reference</span>
-                <span className="text-sm font-mono text-indigo-600 dark:text-indigo-400 font-medium">{keyInfo.studentId}</span>
-              </div>
-            )}
-
-            {keyInfo.program && (
-              <div className="space-y-0.5">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal block">Program / Project</span>
-                <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{keyInfo.program}</span>
-              </div>
-            )}
-
             {keyInfo.requestedDates && (
-              <div className="space-y-0.5">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal block">Dates / Timelines</span>
-                <span className="text-sm font-medium text-amber-700 dark:text-amber-400 flex items-center space-x-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>{keyInfo.requestedDates}</span>
-                </span>
+              <div>
+                <span className="text-[10px] text-[var(--text-muted)] block">Dates</span>
+                <span className="font-medium text-[var(--status-action)]">{keyInfo.requestedDates}</span>
               </div>
             )}
-
-            {keyInfo.parentsCCd && (
-              <div className="space-y-0.5">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal block">Stakeholders CC&apos;d</span>
-                <span className="text-sm font-medium text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>{keyInfo.parentsCCd}</span>
-                </span>
-              </div>
-            )}
-
-            {keyInfo.reason && (
-              <div className="col-span-1 sm:col-span-2 space-y-0.5">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal block">Extracted Context</span>
-                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{keyInfo.reason}</span>
+            {keyInfo.program && (
+              <div className="col-span-2">
+                <span className="text-[10px] text-[var(--text-muted)] block">Project / Program</span>
+                <span className="text-[var(--text-primary)]">{keyInfo.program}</span>
               </div>
             )}
           </div>
-
-          {keyInfo.attachments && keyInfo.attachments.length > 0 && (
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center space-x-2 text-xs">
-              <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-normal">Referenced Documents:</span>
-              {keyInfo.attachments.map((att, idx) => (
-                <span key={idx} className="text-[11px] font-mono text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60">
-                  {att}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
-      {/* 5. AI Verification Insights */}
+      {/* 6. Priora Insights (Clean Bullet List) */}
       {isAnalyzed && insights && insights.length > 0 && (
-        <div className="space-y-2 pt-1">
-          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-2">
-            <ShieldCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            <span>AI Verification Insights</span>
-          </h4>
-          <ul className="space-y-2 pt-1 text-xs text-slate-700 dark:text-slate-300">
+        <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] block">
+            Priora Insights
+          </span>
+          <ul className="space-y-1 text-xs text-[var(--text-secondary)]">
             {insights.map((ins, i) => (
-              <li key={i} className="flex items-start space-x-2.5">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0 mt-0.5">✓</span>
-                <span className="text-xs text-slate-700 dark:text-slate-300 font-normal leading-relaxed">{ins}</span>
+              <li key={i} className="flex items-start space-x-1.5 leading-relaxed">
+                <span className="text-[#3F5F8F] dark:text-[#7CA1D8] font-bold text-xs shrink-0">•</span>
+                <span>{ins}</span>
               </li>
             ))}
           </ul>
         </div>
-      )}
-
-      {/* 6. Recommended Action Card */}
-      {isAnalyzed && recAction && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 p-5 text-xs text-slate-900 dark:text-slate-100 shadow-2xs">
-          <div className="flex items-start space-x-3.5">
-            <Award className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <span className="font-semibold text-xs text-emerald-800 dark:text-emerald-300 block">Recommended Action</span>
-              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 leading-snug">{recAction.actionTitle}</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 font-normal leading-relaxed">{recAction.reasoning}</p>
-            </div>
-          </div>
-
-          <div className="shrink-0 text-right">
-            <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-3 py-1 rounded-md border border-slate-200 dark:border-slate-700 font-medium inline-block">
-              Confidence {recAction.confidenceScore || 95}%
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Fallback Bullet Points if no structured panel */}
-      {isAnalyzed && !keyInfo && summary.bulletPoints && summary.bulletPoints.length > 0 && (
-        <ul className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300 list-disc list-inside pt-1 border-t border-slate-100 dark:border-slate-800/60">
-          {summary.bulletPoints.map((pt, i) => (
-            <li key={i} className="font-normal leading-relaxed">{pt}</li>
-          ))}
-        </ul>
       )}
     </div>
   );

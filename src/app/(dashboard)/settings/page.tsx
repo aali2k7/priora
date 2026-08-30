@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MOCK_EXECUTIVE_USER } from "@/lib/mock-data";
-import { RefreshCw, LogOut, CheckCircle2, Lock, Sun, Moon, Monitor } from "lucide-react";
+import { RefreshCw, LogOut, Lock, Sun, Moon, Monitor } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { authClient, useSession } from "@/lib/auth-client";
 
@@ -49,27 +49,27 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-[var(--text-primary)]">Settings & Preferences</h1>
-        <p className="text-xs text-[var(--text-muted)]">Manage your appearance, connected Gmail account, and security guardrails.</p>
+        <h2 className="text-base font-semibold text-[var(--text-primary)]">Settings & Preferences</h2>
+        <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+          Manage appearance, connected Gmail account, and privacy policies.
+        </p>
       </div>
 
-      {/* Theme Preference Selector Card */}
-      <Card variant="glass" className="p-6 space-y-4 border-slate-200 dark:border-slate-800">
-        <CardHeader className="p-0 flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Appearance Theme</CardTitle>
-            <CardDescription className="text-xs">Choose between Light, Dark, or System theme preferences.</CardDescription>
-          </div>
+      {/* Theme Preference */}
+      <Card className="p-5 space-y-4">
+        <CardHeader className="p-0">
+          <CardTitle className="text-sm font-semibold">Appearance Theme</CardTitle>
+          <CardDescription className="text-xs">Select your visual appearance preference.</CardDescription>
         </CardHeader>
 
-        <CardContent className="p-0 pt-2">
+        <CardContent className="p-0 pt-1">
           <div className="grid grid-cols-3 gap-3">
             {[
-              { id: "light", label: "Light", icon: Sun, desc: "Clean Apple white design" },
-              { id: "dark", label: "Dark", icon: Moon, desc: "Refined dark slate mode" },
-              { id: "system", label: "System", icon: Monitor, desc: "Follow OS preference" },
+              { id: "light", label: "Light", icon: Sun, desc: "Direction C canvas" },
+              { id: "dark", label: "Dark", icon: Moon, desc: "Refined dark mode" },
+              { id: "system", label: "System", icon: Monitor, desc: "Match operating system" },
             ].map((t) => {
               const Icon = t.icon;
               const isSelected = theme === t.id;
@@ -77,13 +77,13 @@ export default function SettingsPage() {
                 <button
                   key={t.id}
                   onClick={() => setTheme(t.id as "light" | "dark" | "system")}
-                  className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all cursor-pointer text-center space-y-2 focus-ring ${
+                  className={`flex flex-col items-center justify-center p-3 rounded border transition-colors cursor-pointer text-center space-y-1.5 focus-ring ${
                     isSelected
-                      ? "bg-indigo-500/10 dark:bg-indigo-500/15 border-indigo-500 text-indigo-700 dark:text-indigo-300 shadow-2xs font-semibold"
-                      : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
+                      ? "bg-[var(--bg-surface-selected)] border-[#3F5F8F] text-[#3F5F8F] dark:text-[#7CA1D8] font-semibold"
+                      : "bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)]"
                   }`}
                 >
-                  <Icon className={`h-5 w-5 ${isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"}`} />
+                  <Icon className={`h-4 w-4 ${isSelected ? "text-[#3F5F8F] dark:text-[#7CA1D8]" : "text-[var(--text-muted)]"}`} />
                   <div>
                     <p className="text-xs font-semibold">{t.label}</p>
                     <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{t.desc}</p>
@@ -95,23 +95,22 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Account & Sync Status Card */}
-      <Card variant="glass" className="p-6 space-y-6 border-slate-200 dark:border-slate-800">
+      {/* Gmail Account & Sync Status */}
+      <Card className="p-5 space-y-4">
         <CardHeader className="p-0 flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-base">Gmail Integration (Better Auth)</CardTitle>
-            <CardDescription className="text-xs">Connected Google OAuth credentials & session state.</CardDescription>
+            <CardTitle className="text-sm font-semibold">Gmail Integration</CardTitle>
+            <CardDescription className="text-xs">Connected Google OAuth via Better Auth.</CardDescription>
           </div>
-          <Badge variant="success" className="space-x-1">
-            <CheckCircle2 className="h-3 w-3" />
+          <Badge variant="success" dot>
             <span>Connected</span>
           </Badge>
         </CardHeader>
 
-        <CardContent className="p-0 space-y-4 pt-2">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+        <CardContent className="p-0 pt-1 space-y-3">
+          <div className="flex items-center justify-between p-3 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)]">
             <div className="flex items-center space-x-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-sm font-bold overflow-hidden">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] text-xs font-bold overflow-hidden">
                 {activeUser.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={activeUser.avatarUrl} alt={activeUser.name} className="h-full w-full object-cover" />
@@ -120,8 +119,8 @@ export default function SettingsPage() {
                 )}
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-200">{activeUser.name}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{activeUser.email}</p>
+                <p className="text-xs font-semibold text-[var(--text-primary)]">{activeUser.name}</p>
+                <p className="text-[11px] text-[var(--text-secondary)]">{activeUser.email}</p>
               </div>
             </div>
 
@@ -132,47 +131,47 @@ export default function SettingsPage() {
               disabled={isSyncing}
               className="text-xs space-x-1.5"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin text-indigo-500" : ""}`} />
+              <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin text-[#3F5F8F]" : "text-[var(--text-muted)]"}`} />
               <span>{isSyncing ? "Syncing..." : "Sync Now"}</span>
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Privacy Guardrails Disclosure Card */}
-      <Card variant="glass" className="p-6 space-y-4 border-slate-200 dark:border-slate-800">
-        <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-semibold text-sm">
-          <Lock className="h-4 w-4" />
-          <span>Executive Data Privacy & AI Ethics</span>
+      {/* Security & Privacy */}
+      <Card className="p-5 space-y-3">
+        <div className="flex items-center space-x-2 text-[#3F5F8F] dark:text-[#7CA1D8] font-semibold text-xs uppercase tracking-wider">
+          <Lock className="h-3.5 w-3.5" />
+          <span>Privacy & Security</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1.5">
-            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-200">Zero AI Training Guarantee</h4>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-              Your email messages, thread history, and contact details are never used to train public AI models or stored in external vector stores.
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div className="p-3 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
+            <h4 className="text-xs font-semibold text-[var(--text-primary)]">Zero AI Training</h4>
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Email contents and metadata are processed through Gemini with structured parameters and never used to train foundation models.
             </p>
           </div>
 
-          <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-1.5">
-            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-200">100% Human-in-the-Loop</h4>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-              Priora never sends emails automatically without explicit executive review and one-click approval in the draft composer.
+          <div className="p-3 rounded bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
+            <h4 className="text-xs font-semibold text-[var(--text-primary)]">Human-in-the-Loop</h4>
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Priora operates strictly in read-and-draft mode. No outgoing email is ever sent without explicit user review and click approval.
             </p>
           </div>
         </div>
       </Card>
 
       {/* Disconnect Action */}
-      <div className="pt-4 flex justify-end">
+      <div className="pt-2 flex justify-end">
         <Button
           variant="danger"
           size="sm"
           onClick={handleSignOut}
-          className="space-x-1.5 text-xs cursor-pointer"
+          className="space-x-1.5 text-xs"
         >
-          <LogOut className="h-3.5 w-3.5" />
-          <span>Disconnect Gmail & Sign Out</span>
+          <LogOut className="h-3 w-3" />
+          <span>Sign Out</span>
         </Button>
       </div>
     </div>

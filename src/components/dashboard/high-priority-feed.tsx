@@ -1,9 +1,7 @@
 import React from "react";
 import Link from "next/link";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { EmailThread } from "@/types/email";
-import { ArrowRight, Inbox, Sparkles } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
 
 interface HighPriorityFeedProps {
   threads: EmailThread[];
@@ -11,56 +9,80 @@ interface HighPriorityFeedProps {
 
 export function HighPriorityFeed({ threads }: HighPriorityFeedProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-[var(--text-primary)] flex items-center space-x-2">
-            <Inbox className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-            <span>Priority Inbox Feed</span>
-          </h2>
-          <p className="text-xs text-[var(--text-muted)]">Emails sorted by executive impact and urgency</p>
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center space-x-2">
+            <Zap className="h-4 w-4 text-[#3F5F8F] dark:text-[#7CA1D8]" />
+            <span>Priority Attention Feed</span>
+          </h3>
+          <p className="text-xs text-[var(--text-secondary)]">Emails sorted by urgency and action requirements</p>
         </div>
 
-        <Link href="/inbox" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1">
-          <span>Open Full Workstation</span>
+        <Link
+          href="/inbox"
+          className="text-xs font-semibold text-[#3F5F8F] dark:text-[#7CA1D8] hover:underline flex items-center space-x-1"
+        >
+          <span>Open Full Inbox</span>
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
 
-      <div className="space-y-2.5">
-        {threads.map((thread) => (
-          <Link key={thread.id} href={`/inbox?threadId=${thread.id}`}>
-            <Card variant="glass" className="p-4 hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700">
-                    {thread.participants[0]?.name.charAt(0)}
-                  </div>
+      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] divide-y divide-[var(--border-subtle)] overflow-hidden">
+        {threads.length === 0 ? (
+          <div className="p-8 text-center text-xs text-[var(--text-muted)]">
+            No priority threads in current 15-day window.
+          </div>
+        ) : (
+          threads.slice(0, 10).map((thread) => {
+            const isUrgent = thread.priority === "urgent" || (typeof thread.urgencyScore === "number" && thread.urgencyScore >= 75);
+            const isAction = thread.actionRequired === true || thread.category === "action_required";
+
+            return (
+              <Link
+                key={thread.id}
+                href={`/inbox?threadId=${thread.id}`}
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-[var(--bg-surface-hover)] transition-colors gap-2 group block"
+              >
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  {/* Status Indicator */}
+                  {isUrgent ? (
+                    <span className="h-2 w-2 rounded-full bg-[#B83A3A] shrink-0" />
+                  ) : isAction ? (
+                    <span className="h-2 w-2 rounded-full bg-[#A56B20] shrink-0" />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-[var(--text-muted)] opacity-40 shrink-0" />
+                  )}
+
                   <div className="min-w-0">
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs font-semibold text-slate-900 dark:text-slate-200 truncate">
-                        {thread.participants[0]?.name}
+                      <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                        {thread.participants[0]?.name || "Sender"}
                       </span>
-                      {thread.priority === "urgent" && <Badge variant="urgent">Urgent</Badge>}
-                      {thread.category === "vip" && <Badge variant="vip">VIP</Badge>}
+                      {thread.category === "vip" && (
+                        <span className="text-[9px] font-mono px-1 rounded bg-[var(--status-ai-subtle)] text-[#526B9E]">
+                          VIP
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate mt-0.5 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    <p className="text-xs text-[var(--text-secondary)] truncate group-hover:text-[var(--text-primary)] transition-colors">
                       {thread.subject}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3 shrink-0 justify-between sm:justify-end text-[10px] text-[var(--text-muted)]">
-                  <span className="flex items-center space-x-1 text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20 font-medium">
-                    <Sparkles className="h-3 w-3" />
-                    <span>AI Brief</span>
-                  </span>
+                <div className="flex items-center space-x-2 shrink-0 text-[11px] text-[var(--text-muted)] sm:justify-end">
+                  {thread.analyzedAt && typeof thread.urgencyScore === "number" && (
+                    <span className="text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--bg-canvas)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">
+                      {thread.urgencyScore}/100
+                    </span>
+                  )}
                   <span>{thread.lastMessageTimestamp}</span>
                 </div>
-              </div>
-            </Card>
-          </Link>
-        ))}
+              </Link>
+            );
+          })
+        )}
       </div>
     </div>
   );

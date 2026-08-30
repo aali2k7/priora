@@ -7,18 +7,19 @@ export const metadata = {
 };
 
 interface InboxPageProps {
-  searchParams: Promise<{ threadId?: string; action?: string }>;
+  searchParams: Promise<{ threadId?: string; action?: string; view?: string }>;
 }
 
 export default async function InboxPage({ searchParams }: InboxPageProps) {
   const resolvedParams = await searchParams;
 
   return (
-    <div className="max-w-[1600px] mx-auto h-full">
+    <div className="h-full w-full">
       <ThreePaneWorkspace
         initialThreads={[]}
         initialThreadId={resolvedParams.threadId}
         initialAction={resolvedParams.action}
+        initialView={resolvedParams.view as "inbox" | "focused" | "archived" | undefined}
       />
     </div>
   );

@@ -24,14 +24,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased transition-colors duration-200">
-      {/* Navigation Sidebar */}
-      <SidebarNav urgentCount={2} />
+    <div className="flex min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased transition-colors duration-150">
+      {/* Navigation Sidebar (Fixed Width, Visual Separation) */}
+      <SidebarNav />
 
-      {/* Main Workspace Area */}
-      <div className="flex flex-1 flex-col min-w-0">
+      {/* Main Workspace Column */}
+      <div className="flex flex-1 flex-col min-w-0 h-screen overflow-hidden">
         <HeaderBar onOpenCommandMenu={() => setIsCommandMenuOpen(true)} />
-        <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 lg:p-8">
+        <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
           {children}
         </main>
       </div>

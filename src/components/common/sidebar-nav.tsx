@@ -1,47 +1,92 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
+  LayoutDashboard,
+  Zap,
   Sparkles,
   Inbox,
+  Focus,
+  Archive,
   Settings,
-  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   Menu,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
-interface SidebarNavProps {
+interface SidebarNavContentProps {
   urgentCount?: number;
 }
 
-export function SidebarNav({ urgentCount = 2 }: SidebarNavProps) {
+function SidebarNavContent({ urgentCount = 0 }: SidebarNavContentProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentView = searchParams.get("view") || "inbox";
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
 
-  const navItems = [
+  // Define structured navigation groups matching the executive reference
+  const navSections = [
     {
-      label: "Briefing",
-      href: "/dashboard",
-      icon: Sparkles,
-      badge: null,
+      group: "OVERVIEW",
+      items: [
+        {
+          label: "Overview",
+          href: "/dashboard",
+          icon: LayoutDashboard,
+          isActive: pathname === "/dashboard",
+        },
+        {
+          label: "Priority",
+          href: "/inbox?view=focused",
+          icon: Zap,
+          isActive: pathname === "/inbox" && currentView === "focused",
+          badge: urgentCount > 0 ? urgentCount : undefined,
+        },
+        {
+          label: "Briefing",
+          href: "/dashboard",
+          icon: Sparkles,
+          isActive: pathname === "/briefing",
+        },
+      ],
     },
     {
-      label: "Inbox",
-      href: "/inbox",
-      icon: Inbox,
-      badge: urgentCount > 0 ? <Badge variant="urgent">{urgentCount}</Badge> : null,
+      group: "MAIL",
+      items: [
+        {
+          label: "Inbox",
+          href: "/inbox?view=inbox",
+          icon: Inbox,
+          isActive: pathname === "/inbox" && currentView === "inbox",
+        },
+        {
+          label: "Focused",
+          href: "/inbox?view=focused",
+          icon: Focus,
+          isActive: pathname === "/inbox" && currentView === "focused",
+        },
+        {
+          label: "Archived",
+          href: "/inbox?view=archived",
+          icon: Archive,
+          isActive: pathname === "/inbox" && currentView === "archived",
+        },
+      ],
     },
     {
-      label: "Settings",
-      href: "/settings",
-      icon: Settings,
-      badge: null,
+      group: "SYSTEM",
+      items: [
+        {
+          label: "Settings",
+          href: "/settings",
+          icon: Settings,
+          isActive: pathname === "/settings",
+        },
+      ],
     },
   ];
 
@@ -51,99 +96,123 @@ export function SidebarNav({ urgentCount = 2 }: SidebarNavProps) {
       <div className="lg:hidden fixed bottom-4 right-4 z-40">
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg focus-ring active:scale-95 transition-transform"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#3F5F8F] text-white shadow-md focus-ring"
           aria-label="Toggle Navigation Menu"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4" />
         </button>
       </div>
 
       {/* Sidebar Container */}
       <aside
         className={cn(
-          "flex flex-col border-r border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-950/80 backdrop-blur-md transition-all duration-200 z-30",
-          isCollapsed ? "w-16" : "w-64",
-          "hidden lg:flex shrink-0 min-h-screen"
+          "flex flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-all duration-200 z-30",
+          isCollapsed ? "w-14" : "w-56",
+          "hidden lg:flex shrink-0 min-h-screen select-none"
         )}
       >
         {/* Logo / Brand Header */}
-        <div className="flex h-14 items-center justify-between px-4 border-b border-slate-200/80 dark:border-slate-800/60">
+        <div className="flex h-14 items-center justify-between px-4 border-b border-[var(--border-subtle)]">
           {!isCollapsed && (
-            <Link href="/dashboard" className="flex items-center space-x-2.5 group">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/10 dark:bg-indigo-600/20 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform">
-                <ShieldCheck className="h-5 w-5" />
+            <Link href="/dashboard" className="flex items-center space-x-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-[#3F5F8F] text-white font-serif font-bold text-xs">
+                P
               </div>
-              <span className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+              <span className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">
                 Priora
               </span>
             </Link>
           )}
 
           {isCollapsed && (
-            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/10 dark:bg-indigo-600/20 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="mx-auto flex h-6 w-6 items-center justify-center rounded bg-[#3F5F8F] text-white font-serif font-bold text-xs">
+              P
             </div>
           )}
 
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 focus-ring transition-colors"
+            className="hidden lg:flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] focus-ring transition-colors"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
-            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
           </button>
         </div>
 
-        {/* Primary Navigation Links */}
-        <nav className="flex-1 space-y-1.5 p-3">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-            const Icon = item.icon;
+        {/* Structured Navigation Groups */}
+        <nav className="flex-1 py-3 px-2 space-y-4 overflow-y-auto custom-scrollbar">
+          {navSections.map((section, sIdx) => (
+            <div key={section.group} className="space-y-1">
+              {!isCollapsed && (
+                <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">
+                  {section.group}
+                </div>
+              )}
+              {isCollapsed && sIdx > 0 && (
+                <div className="my-2 border-t border-[var(--border-subtle)]" />
+              )}
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center space-x-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 focus-ring group relative",
-                  isActive
-                    ? "bg-indigo-500/10 dark:bg-slate-800/90 text-indigo-700 dark:text-slate-100 border border-indigo-500/20 dark:border-slate-700/60 shadow-2xs font-semibold"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-slate-200",
-                  isCollapsed && "justify-center px-0"
-                )}
-                title={isCollapsed ? item.label : undefined}
-              >
-                {isActive && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-500" />
-                )}
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0 transition-colors",
-                    isActive
-                      ? "text-indigo-600 dark:text-indigo-400"
-                      : "text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200"
-                  )}
-                />
-                {!isCollapsed && <span className="flex-1">{item.label}</span>}
-                {!isCollapsed && item.badge && <div>{item.badge}</div>}
-              </Link>
-            );
-          })}
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = item.isActive;
+
+                  return (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center space-x-2.5 rounded px-2 py-1.5 text-xs transition-colors group relative",
+                        isActive
+                          ? "bg-[var(--bg-surface-selected)] text-[#3F5F8F] dark:text-[#7CA1D8] font-semibold"
+                          : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] font-normal",
+                        isCollapsed && "justify-center px-0"
+                      )}
+                      title={isCollapsed ? item.label : undefined}
+                    >
+                      {isActive && (
+                        <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r bg-[#3F5F8F] dark:bg-[#7CA1D8]" />
+                      )}
+                      <Icon
+                        className={cn(
+                          "h-4 w-4 shrink-0 transition-colors",
+                          isActive
+                            ? "text-[#3F5F8F] dark:text-[#7CA1D8]"
+                            : "text-[var(--text-muted)] group-hover:text-[var(--text-primary)]"
+                        )}
+                      />
+                      {!isCollapsed && <span className="flex-1 truncate">{item.label}</span>}
+                      {!isCollapsed && typeof item.badge === "number" && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--status-urgent-subtle)] text-[var(--status-urgent)] border border-[var(--status-urgent-border)]">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        {/* Bottom AI Status Pill */}
+        {/* Bottom System Status */}
         {!isCollapsed && (
-          <div className="p-3 border-t border-slate-200/80 dark:border-slate-800/60">
-            <div className="flex items-center space-x-2.5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-500/10 p-3">
-              <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-              <div className="flex-1 overflow-hidden">
-                <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 truncate">AI Engine Active</p>
-                <p className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 truncate">Gemini 3.6 Flash</p>
-              </div>
+          <div className="p-3 border-t border-[var(--border-subtle)]">
+            <div className="flex items-center space-x-2 text-[11px] text-[var(--text-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#477A5B] shrink-0" />
+              <span className="truncate">Priora Intelligence Active</span>
             </div>
           </div>
         )}
       </aside>
     </>
+  );
+}
+
+export function SidebarNav(props: SidebarNavContentProps) {
+  return (
+    <Suspense fallback={<aside className="w-56 hidden lg:flex border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] min-h-screen" />}>
+      <SidebarNavContent {...props} />
+    </Suspense>
   );
 }

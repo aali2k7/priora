@@ -5,10 +5,9 @@ import { EmailThread } from "@/types/email";
 import { AISummary } from "@/types/ai";
 import { AISummaryBanner } from "./ai-summary-banner";
 import { AIDraftComposer } from "./ai-draft-composer";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
-import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle, FileText, Users } from "lucide-react";
+import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle, FileText, Reply } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
 
 interface ThreadReaderProps {
@@ -42,7 +41,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           }
         }
       } catch (err) {
-        console.warn("[ThreadReader] Failed to fetch summary from API, using local thread state:", err);
+        console.warn("[ThreadReader] Failed to fetch summary from API, using thread state:", err);
       }
 
       if (!ignore) {
@@ -60,7 +59,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           setSummary({
             threadId: thread.id,
             executiveBrief: "Analysis pending",
-            bulletPoints: ["This thread is in queue for Gemini AI executive analysis."],
+            bulletPoints: ["This thread is queued for Gemini analysis."],
             analyzedAt: undefined,
           });
         }
@@ -121,73 +120,72 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
     }, 1200);
   };
 
+  const primarySender = thread.participants[0] || { name: "Sender", email: "" };
+
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-canvas)] p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-6">
-      {/* Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-4">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <h1 className="text-lg font-bold text-[var(--text-primary)]">{thread.subject}</h1>
-            {thread.priority === "urgent" && <Badge variant="urgent">Urgent</Badge>}
-            {thread.category === "vip" && <Badge variant="vip">VIP</Badge>}
-            {thread.actionRequired && <Badge variant="default">Action Required</Badge>}
+    <div className="flex flex-col h-full bg-[var(--bg-canvas)] p-5 md:p-6 overflow-y-auto custom-scrollbar space-y-5">
+      {/* 1. Header Toolbar: Subject + Metadata + Actions */}
+      <div className="border-b border-[var(--border-subtle)] pb-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-base sm:text-lg font-semibold text-[var(--text-primary)] leading-snug">
+              {thread.subject}
+            </h1>
+            <p className="text-xs text-[var(--text-secondary)]">
+              {primarySender.name} {primarySender.email ? `• <${primarySender.email}>` : ""} • {thread.lastMessageTimestamp}
+            </p>
           </div>
-          <p className="text-[11px] text-[var(--text-muted)]">
-            {thread.messages.length} message{thread.messages.length > 1 ? "s" : ""} in thread
-          </p>
-        </div>
 
-        {/* Action Toolbar */}
-        <div className="flex items-center space-x-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleArchive}
-            disabled={isArchiving}
-            className="text-xs"
-            title="Archive Thread (E)"
-          >
-            <Archive className="h-3.5 w-3.5 mr-1 text-slate-400" />
-            <span>Archive</span>
-            <ShortcutKey className="ml-1">E</ShortcutKey>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSnooze}
-            disabled={isSnoozing}
-            className="text-xs"
-            title="Snooze Thread (S)"
-          >
-            <Clock className="h-3.5 w-3.5 mr-1 text-slate-400" />
-            <span>Snooze</span>
-            <ShortcutKey className="ml-1">S</ShortcutKey>
-          </Button>
-
-          {!isReplyOpen && (
+          {/* Action Toolbar */}
+          <div className="flex items-center space-x-1.5 shrink-0">
             <Button
-              variant="ai-sparkle"
+              variant="outline"
               size="sm"
-              onClick={() => setIsReplyOpen(true)}
-              className="text-xs"
+              onClick={handleArchive}
+              disabled={isArchiving}
+              title="Archive Thread (E)"
             >
-              <span>Reply with AI</span>
-              <ShortcutKey className="ml-1">R</ShortcutKey>
+              <Archive className="h-3 w-3 mr-1 text-[var(--text-muted)]" />
+              <span>Archive</span>
+              <ShortcutKey className="ml-1">E</ShortcutKey>
             </Button>
-          )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSnooze}
+              disabled={isSnoozing}
+              title="Snooze Thread (S)"
+            >
+              <Clock className="h-3 w-3 mr-1 text-[var(--text-muted)]" />
+              <span>Snooze</span>
+              <ShortcutKey className="ml-1">S</ShortcutKey>
+            </Button>
+
+            {!isReplyOpen && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsReplyOpen(true)}
+              >
+                <Reply className="h-3 w-3 mr-1" />
+                <span>Reply</span>
+                <ShortcutKey className="ml-1 text-white/70">R</ShortcutKey>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Sent Confirmation Banner */}
+      {/* Confirmation Banner */}
       {isSentSuccess && (
-        <div className="flex items-center space-x-2.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-300 dark:border-emerald-500/30 p-4 text-xs text-emerald-800 dark:text-emerald-300 shadow-2xs">
-          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="font-medium">Reply dispatched successfully! Thread archived.</span>
+        <div className="flex items-center space-x-2 rounded-md bg-[var(--status-success-subtle)] border border-[var(--status-success-border)] p-3 text-xs text-[var(--status-success)]">
+          <CheckCircle className="h-4 w-4 shrink-0" />
+          <span className="font-medium">Reply dispatched successfully. Thread archived.</span>
         </div>
       )}
 
-      {/* AI Summary Banner & Key Info Panel */}
+      {/* 2. Executive AI Brief Section */}
       {summary && (
         <AISummaryBanner
           summary={summary}
@@ -196,98 +194,94 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
         />
       )}
 
-      {/* AI Composer (If Open) */}
+      {/* 3. Reply Composer */}
       {isReplyOpen && !isSentSuccess && (
         <AIDraftComposer threadId={thread.id} onSentSuccess={handleSentSuccess} />
       )}
 
-      {/* Thread Messages Timeline */}
+      {/* 4. Conversation History (Clean Timeline with Thin Separators) */}
       <div className="space-y-3 pt-2">
-        <h3 className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
-          Email Conversation History
-        </h3>
+        <div className="flex items-center justify-between pb-1 border-b border-[var(--border-subtle)]">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Conversation History ({thread.messages.length})
+          </span>
+        </div>
 
-        {thread.messages.map((msg) => {
-          const isExpanded = expandedMessages[msg.id];
-          return (
-            <div
-              key={msg.id}
-              className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 overflow-hidden shadow-2xs"
-            >
-              {/* Message Header */}
-              <button
-                onClick={() => toggleMessage(msg.id)}
-                className="flex w-full items-center justify-between p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors focus-ring cursor-pointer"
+        <div className="space-y-2.5">
+          {thread.messages.map((msg) => {
+            const isExpanded = expandedMessages[msg.id];
+            return (
+              <div
+                key={msg.id}
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden"
               >
-                <div className="flex items-center space-x-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0">
-                    {msg.sender.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={msg.sender.avatarUrl} alt={msg.sender.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <User className="h-4 w-4 text-slate-400" />
-                    )}
+                {/* Message Header */}
+                <button
+                  onClick={() => toggleMessage(msg.id)}
+                  className="flex w-full items-center justify-between p-3.5 text-left hover:bg-[var(--bg-surface-hover)] transition-colors focus-ring cursor-pointer"
+                >
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--bg-canvas)] text-[11px] font-semibold text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0">
+                      {msg.sender.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={msg.sender.avatarUrl} alt={msg.sender.name} className="h-full w-full object-cover rounded-full" />
+                      ) : (
+                        msg.sender.name.charAt(0) || <User className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                          {msg.sender.name}
+                        </span>
+                        <span className="text-[11px] text-[var(--text-muted)] truncate">
+                          &lt;{msg.sender.email}&gt;
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-semibold text-slate-900 dark:text-slate-200">
-                        {msg.sender.name}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        &lt;{msg.sender.email}&gt;
-                      </span>
+
+                  <div className="flex items-center space-x-2 text-[11px] text-[var(--text-muted)] shrink-0">
+                    <span>{msg.timestamp}</span>
+                    {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </div>
+                </button>
+
+                {/* Message Body & Attachments */}
+                {isExpanded && (
+                  <div className="p-3.5 pt-2 border-t border-[var(--border-subtle)] space-y-3">
+                    <div className="text-xs text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap font-sans">
+                      {msg.bodyText}
                     </div>
 
-                    {/* CC list if present */}
-                    {msg.ccRecipients && msg.ccRecipients.length > 0 && (
-                      <div className="flex items-center space-x-1 text-[11px] text-emerald-700 dark:text-emerald-400/90 mt-0.5 font-medium">
-                        <Users className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>CC&apos;d: {msg.ccRecipients.map((c) => c.name).join(", ")}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-3 text-[10px] text-slate-400 shrink-0">
-                  <span>{msg.timestamp}</span>
-                  {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                </div>
-              </button>
-
-              {/* Message Body & Attachments */}
-              {isExpanded && (
-                <div className="p-4 pt-2 border-t border-slate-200/80 dark:border-slate-800/60 space-y-4">
-                  <div className="text-xs sm:text-sm text-slate-800 dark:text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
-                    {msg.bodyText}
-                  </div>
-
-                  {/* Attachments Section */}
-                  {msg.attachments && msg.attachments.length > 0 && (
-                    <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 space-y-2">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block">
-                        Attachments ({msg.attachments.length})
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        {msg.attachments.map((att, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center space-x-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-2.5 text-xs text-slate-800 dark:text-slate-200 hover:border-indigo-500/50 transition-colors shadow-2xs"
-                          >
-                            <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                            <div>
-                              <p className="font-semibold text-[11px] text-slate-900 dark:text-slate-200">{att.name}</p>
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400">{att.size}</p>
+                    {/* Attachments */}
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1.5">
+                        <span className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">
+                          Attachments ({msg.attachments.length})
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.attachments.map((att, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center space-x-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-2 text-xs text-[var(--text-primary)]"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-[#3F5F8F] dark:text-[#7CA1D8]" />
+                              <div>
+                                <p className="font-medium text-[11px]">{att.name}</p>
+                                <p className="text-[10px] text-[var(--text-muted)]">{att.size}</p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
