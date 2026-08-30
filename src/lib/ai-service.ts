@@ -399,11 +399,11 @@ export class AIService {
 
   /**
    * Safely batch analyzes unanalyzed threads for a Gmail account in the background.
-   * Runs sequentially with delay to stay comfortably within rate limits.
+   * Runs in parallel batches of 3 to quickly pre-warm executive AI briefings.
    */
   static async analyzeUnanalyzedThreadsForAccount(
     accountId: string,
-    limit = 5
+    limit = 10
   ): Promise<{ processed: number; errors: number }> {
     if (!process.env.GEMINI_API_KEY) {
       console.log("[AIService] Skipping background analysis: GEMINI_API_KEY not configured.");
@@ -424,22 +424,33 @@ export class AIService {
       return { processed: 0, errors: 0 };
     }
 
-    console.log(`[AIService] Found ${unanalyzed.length} unanalyzed threads for account ${accountId}.`);
+    console.log(`[AIService] Starting parallel AI analysis for ${unanalyzed.length} threads (Account: ${accountId})...`);
     let processed = 0;
     let errors = 0;
 
-    for (const item of unanalyzed) {
-      try {
-        await this.analyzeThreadWithGemini(item.id);
-        processed++;
-        // Small delay to respect rate limits
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      } catch (err: unknown) {
-        errors++;
-        console.error(`[AIService] Failed background analysis for thread ${item.id}:`, err);
+    const CHUNK_SIZE = 3;
+    for (let i = 0; i < unanalyzed.length; i += CHUNK_SIZE) {
+      const chunk = unanalyzed.slice(i, i + CHUNK_SIZE);
+      const results = await Promise.allSettled(
+        chunk.map((item) => this.analyzeThreadWithGemini(item.id))
+      );
+
+      for (const res of results) {
+        if (res.status === "fulfilled") {
+          processed++;
+        } else {
+          errors++;
+          console.error("[AIService] Failed background analysis item:", res.reason);
+        }
+      }
+
+      // Brief breather between chunks to stay well within Google GenAI quotas
+      if (i + CHUNK_SIZE < unanalyzed.length) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
     }
 
+    console.log(`[AIService] AI pre-warming finished: ${processed} analyzed, ${errors} errors.`);
     return { processed, errors };
   }
 

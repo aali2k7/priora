@@ -38,37 +38,63 @@ export function DashboardClientView({ initialBriefing }: DashboardClientViewProp
 
     loadData();
 
+    const handleRefresh = () => {
+      loadData();
+    };
+
+    window.addEventListener("priora-email-synced", handleRefresh);
+    window.addEventListener("priora-email-sent", handleRefresh);
+
+    const tenMinInterval = setInterval(() => {
+      loadData();
+    }, 10 * 60 * 1000);
+
     return () => {
       ignore = true;
+      window.removeEventListener("priora-email-synced", handleRefresh);
+      window.removeEventListener("priora-email-sent", handleRefresh);
+      clearInterval(tenMinInterval);
     };
   }, []);
 
+  // Gentle background check while active sync is ongoing
   useEffect(() => {
     if (!isSyncing) return;
 
     let ignore = false;
-    const interval = setInterval(async () => {
+    let timerId: NodeJS.Timeout;
+
+    const pollSyncStatus = async () => {
       try {
         const res = await fetch("/api/gmail/threads");
         if (res.ok && !ignore) {
           const data = await res.json();
-          setIsSyncing(!!data.isSyncing);
-          if (data.threads) {
+          const stillSyncing = !!data.isSyncing;
+          setIsSyncing(stillSyncing);
+          if (data.threads && data.threads.length > 0) {
             setThreads(data.threads);
+          }
+          if (stillSyncing && !ignore) {
+            timerId = setTimeout(pollSyncStatus, 6000);
           }
         }
       } catch (err) {
-        console.error("[Dashboard] Error polling threads:", err);
+        console.error("[Dashboard] Error checking sync status:", err);
+        if (!ignore) {
+          timerId = setTimeout(pollSyncStatus, 10000);
+        }
       }
-    }, 3000);
+    };
+
+    timerId = setTimeout(pollSyncStatus, 4000);
 
     return () => {
       ignore = true;
-      clearInterval(interval);
+      clearTimeout(timerId);
     };
   }, [isSyncing]);
 
-  if (isLoading || (isSyncing && threads.length === 0)) {
+  if (isLoading && threads.length === 0) {
     return (
       <div className="flex h-64 flex-col items-center justify-center p-8 text-center">
         <div className="flex flex-col items-center space-y-2.5 max-w-sm">
@@ -78,7 +104,7 @@ export function DashboardClientView({ initialBriefing }: DashboardClientViewProp
               Loading Overview
             </h3>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-              Syncing live dataset from local cache...
+              Fetching summary from database cache...
             </p>
           </div>
         </div>

@@ -45,7 +45,14 @@ function HeaderBarContent({ onOpenCommandMenu }: HeaderBarProps) {
   const handleManualSync = async () => {
     setIsSyncing(true);
     try {
-      await fetch("/api/gmail/sync", { method: "POST" });
+      const res = await fetch("/api/gmail/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent("priora-email-synced"));
+      }
     } catch (err) {
       console.error("Sync error:", err);
     } finally {

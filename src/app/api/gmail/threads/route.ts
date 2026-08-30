@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { syncUserGmailInbox } from "@/lib/gmail-sync";
+import { syncUserGmailInbox, isUserSyncing, SYNC_COOLDOWN_MS } from "@/lib/gmail-sync";
 import { EmailThread, PriorityLevel, CategoryTag } from "@/types/email";
 import { getRetentionCutoffDate } from "@/lib/retention";
 
@@ -19,25 +19,34 @@ export async function GET() {
       );
     }
 
-    // Find user's connected Gmail account in Neon PostgreSQL
+    // 1. Find user's connected Gmail account in Neon PostgreSQL
     const account = await prisma.gmailAccount.findFirst({
       where: { userId: session.user.id },
       include: { syncState: true },
     });
 
-    if (!account) {
-      // Trigger initial sync automatically
-      syncUserGmailInbox(session.user.id).catch((err) =>
+    // Determine if automatic background sync is needed (e.g. initial setup or > 10m old)
+    const isActivelySyncing = isUserSyncing(session.user.id) || account?.syncState?.status === "syncing";
+    const needsBackgroundSync =
+      !account ||
+      !account.lastSyncedAt ||
+      Date.now() - new Date(account.lastSyncedAt).getTime() >= SYNC_COOLDOWN_MS;
+
+    if (needsBackgroundSync && !isActivelySyncing) {
+      syncUserGmailInbox(session.user.id, { force: false }).catch((err) =>
         console.error("[GET /api/gmail/threads] Background sync error:", err)
       );
+    }
+
+    if (!account) {
       return NextResponse.json({
         isSyncing: true,
         threads: [],
-        message: "Initial sync started",
+        message: "Initial sync started in background",
       });
     }
 
-    // Fetch rolling 15-day threads from Neon PostgreSQL without arbitrary cap
+    // 2. Fetch rolling 15-day threads from Neon PostgreSQL cache
     const cutoffDate = getRetentionCutoffDate(15);
     const dbThreads = await prisma.thread.findMany({
       where: {
@@ -55,19 +64,7 @@ export async function GET() {
       },
     });
 
-    if (dbThreads.length === 0) {
-      // Trigger sync if empty
-      syncUserGmailInbox(session.user.id).catch((err) =>
-        console.error("[GET /api/gmail/threads] Background sync error:", err)
-      );
-      return NextResponse.json({
-        isSyncing: true,
-        threads: [],
-        message: "Syncing in progress",
-      });
-    }
-
-    // Transform Neon PostgreSQL Prisma models to Priora EmailThread types
+    // 3. Transform Neon PostgreSQL Prisma models to Priora EmailThread types
     const threads: EmailThread[] = dbThreads.map((t) => {
       const messages = t.emails.map((e) => ({
         id: e.id,
@@ -117,7 +114,7 @@ export async function GET() {
       };
     });
 
-    const isSyncing = account.syncState?.status === "syncing";
+    const isSyncing = isActivelySyncing || isUserSyncing(session.user.id);
 
     return NextResponse.json({
       isSyncing,

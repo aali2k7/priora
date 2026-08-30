@@ -36,7 +36,7 @@ export function ThreePaneWorkspace({
   const [activeThreadId, setActiveThreadId] = React.useState<string>(initialThreadId || "");
   const [isMobileViewThread, setIsMobileViewThread] = React.useState(!!initialThreadId);
 
-  // Fetch threads on mount
+  // Fetch threads on mount and setup 10-minute cadence & event listeners
   React.useEffect(() => {
     let ignore = false;
 
@@ -52,7 +52,7 @@ export function ThreePaneWorkspace({
               data.threads.length > 0 &&
               (!initialThreadId || !data.threads.some((t: EmailThread) => t.id === initialThreadId))
             ) {
-              setActiveThreadId(data.threads[0].id);
+              setActiveThreadId((prev) => prev || data.threads[0].id);
             }
           }
         }
@@ -65,41 +65,61 @@ export function ThreePaneWorkspace({
 
     loadWorkspaceData();
 
-    const handleEmailSent = () => {
+    const handleRefresh = () => {
       loadWorkspaceData();
     };
 
-    window.addEventListener("priora-email-sent", handleEmailSent);
+    window.addEventListener("priora-email-sent", handleRefresh);
+    window.addEventListener("priora-email-synced", handleRefresh);
+
+    // 10-minute background auto-refresh
+    const tenMinInterval = setInterval(() => {
+      loadWorkspaceData();
+    }, 10 * 60 * 1000);
 
     return () => {
       ignore = true;
-      window.removeEventListener("priora-email-sent", handleEmailSent);
+      window.removeEventListener("priora-email-sent", handleRefresh);
+      window.removeEventListener("priora-email-synced", handleRefresh);
+      clearInterval(tenMinInterval);
     };
   }, [initialThreadId]);
 
-  // Poll while background syncing
+  // Gentle background check while active sync is ongoing (6s backoff, only while isSyncing)
   React.useEffect(() => {
     if (!isSyncing) return;
 
     let ignore = false;
-    const interval = setInterval(async () => {
+    let timerId: NodeJS.Timeout;
+
+    const pollSyncStatus = async () => {
       try {
         const res = await fetch("/api/gmail/threads");
         if (res.ok && !ignore) {
           const data = await res.json();
-          setIsSyncing(!!data.isSyncing);
-          if (data.threads) {
+          const stillSyncing = !!data.isSyncing;
+          setIsSyncing(stillSyncing);
+          if (data.threads && data.threads.length > 0) {
             setThreads(data.threads);
+            setActiveThreadId((prev) => prev || data.threads[0]?.id || "");
+          }
+          if (stillSyncing && !ignore) {
+            timerId = setTimeout(pollSyncStatus, 6000);
           }
         }
       } catch (err) {
-        console.error("[Workspace] Error polling threads:", err);
+        console.error("[Workspace] Error checking sync status:", err);
+        if (!ignore) {
+          timerId = setTimeout(pollSyncStatus, 10000);
+        }
       }
-    }, 3000);
+    };
+
+    timerId = setTimeout(pollSyncStatus, 4000);
 
     return () => {
       ignore = true;
-      clearInterval(interval);
+      clearTimeout(timerId);
     };
   }, [isSyncing]);
 
