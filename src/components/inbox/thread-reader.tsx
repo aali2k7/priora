@@ -234,7 +234,7 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
                 {/* Message Header */}
                 <button
                   onClick={() => toggleMessage(msg.id)}
-                  className="flex w-full items-center justify-between p-3.5 text-left hover:bg-[var(--bg-surface-hover)] transition-colors focus-ring cursor-pointer"
+                  className="flex w-full items-center justify-between p-3.5 text-left hover:bg-[var(--bg-surface-hover)] transition-colors duration-150 focus-ring cursor-pointer"
                 >
                   <div className="flex items-center space-x-2.5 min-w-0">
                     <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--bg-canvas)] text-[11px] font-semibold text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0">

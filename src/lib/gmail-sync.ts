@@ -206,7 +206,7 @@ export async function syncUserGmailInbox(
     // 4. Fetch all threads within the rolling 15-day window using pagination
     const fifteenDaysAgoSeconds = Math.floor((Date.now() - 15 * 24 * 60 * 60 * 1000) / 1000);
     const gmailQuery = `after:${fifteenDaysAgoSeconds}`;
-    const allThreadItems: { id: string }[] = [];
+    const allThreadItems: { id: string; snippet?: string; historyId?: string }[] = [];
     let pageToken: string | undefined = undefined;
     let lastHistoryId: string | null = null;
     let pageCount = 0;
@@ -245,7 +245,7 @@ export async function syncUserGmailInbox(
         lastHistoryId = threadsListData.historyId;
       }
 
-      const items = (threadsListData.threads || []) as { id: string }[];
+      const items = (threadsListData.threads || []) as { id: string; snippet?: string; historyId?: string }[];
       allThreadItems.push(...items);
       pageToken = threadsListData.nextPageToken;
     } while (pageToken && pageCount < MAX_PAGES);
@@ -260,6 +260,30 @@ export async function syncUserGmailInbox(
       return { success: true, totalSynced: 0, message: "No threads found" };
     }
 
+    // 5. Query existing database threads to detect which threads are already up-to-date
+    const existingDbThreads = await prisma.thread.findMany({
+      where: { accountId: gmailAccount.id },
+      select: {
+        id: true,
+        gmailThreadId: true,
+        snippet: true,
+        lastMessageAt: true,
+      },
+    });
+    const dbThreadMap = new Map(existingDbThreads.map((t) => [t.gmailThreadId, t]));
+
+    // Identify only new or modified threads that require full detail fetch from Gmail
+    const threadsToProcess = allThreadItems.filter((item) => {
+      const existing = dbThreadMap.get(item.id);
+      if (!existing) return true; // New thread
+      if (item.snippet && existing.snippet !== item.snippet) return true; // Content/snippet changed
+      return false; // Already completely synced and up-to-date
+    });
+
+    console.log(
+      `[Gmail Sync] ${allThreadItems.length} total threads found. ${threadsToProcess.length} need updating (${allThreadItems.length - threadsToProcess.length} cached).`
+    );
+
     // Pre-load existing labels for this account into memory cache to prevent redundant queries
     const existingLabels = await prisma.label.findMany({
       where: { accountId: gmailAccount.id },
@@ -269,12 +293,12 @@ export async function syncUserGmailInbox(
       existingLabels.map((l) => [l.gmailLabelId, l.id])
     );
 
-    // 5. Process threads in concurrent batches (Concurrency pool of 8)
+    // 6. Process threads requiring update in concurrent batches of 8
     const BATCH_SIZE = 8;
-    let threadsSyncedCount = 0;
+    let threadsSyncedCount = allThreadItems.length - threadsToProcess.length;
 
-    for (let i = 0; i < allThreadItems.length; i += BATCH_SIZE) {
-      const batchItems = allThreadItems.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < threadsToProcess.length; i += BATCH_SIZE) {
+      const batchItems = threadsToProcess.slice(i, i + BATCH_SIZE);
 
       // Concurrent fetch from Gmail API
       const fetchResults = await Promise.allSettled(
@@ -297,7 +321,7 @@ export async function syncUserGmailInbox(
 
       if (rawThreads.length === 0) continue;
 
-      // 5a. Identify and upsert all new unique labels across this batch in one step
+      // 6a. Identify and upsert all new unique labels across this batch in one step
       const batchLabelIds = new Set<string>();
       for (const t of rawThreads) {
         for (const m of t.messages || []) {
@@ -328,160 +352,149 @@ export async function syncUserGmailInbox(
         }
       }
 
-      // 5b. Persist each thread and its messages in this batch concurrently
-      await Promise.all(
-        rawThreads.map(async (rawThread) => {
-          try {
-            const messages = rawThread.messages || [];
-            if (messages.length === 0) return;
+      // 6b. Persist each thread and its messages in this batch cleanly
+      for (const rawThread of rawThreads) {
+        try {
+          const messages = rawThread.messages || [];
+          if (messages.length === 0) continue;
 
-            const firstMsg = messages[0];
-            const lastMsg = messages[messages.length - 1];
+          const firstMsg = messages[0];
+          const lastMsg = messages[messages.length - 1];
 
-            const getHeader = (msgs: RawGmailMessage, name: string) => {
-              const headers = msgs.payload?.headers || [];
-              return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
-            };
+          const getHeader = (msgs: RawGmailMessage, name: string) => {
+            const headers = msgs.payload?.headers || [];
+            return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+          };
 
-            const subject = getHeader(firstMsg, "Subject") || "(No Subject)";
-            const firstFrom = getHeader(firstMsg, "From");
-            const snippet = firstMsg.snippet || "";
+          const subject = getHeader(firstMsg, "Subject") || "(No Subject)";
+          const firstFrom = getHeader(firstMsg, "From");
+          const snippet = lastMsg.snippet || firstMsg.snippet || "";
 
-            const isUnread = messages.some((m) => m.labelIds?.includes("UNREAD"));
-            const isArchived = !messages.some((m) => m.labelIds?.includes("INBOX"));
-            const isSnoozed = messages.some((m) => m.labelIds?.includes("SNOOZED"));
+          const isUnread = messages.some((m) => m.labelIds?.includes("UNREAD"));
+          const isArchived = !messages.some((m) => m.labelIds?.includes("INBOX"));
+          const isSnoozed = messages.some((m) => m.labelIds?.includes("SNOOZED"));
 
-            const internalTime = lastMsg.internalDate ? parseInt(lastMsg.internalDate, 10) : Date.now();
-            const lastMessageAt = new Date(internalTime);
-            const firstInternalTime = firstMsg.internalDate ? parseInt(firstMsg.internalDate, 10) : Date.now();
+          const internalTime = lastMsg.internalDate ? parseInt(lastMsg.internalDate, 10) : Date.now();
+          const lastMessageAt = new Date(internalTime);
+          const firstInternalTime = firstMsg.internalDate ? parseInt(firstMsg.internalDate, 10) : Date.now();
 
-            // Upsert Thread
-            const dbThread = await prisma.thread.upsert({
+          // Upsert Thread
+          const dbThread = await prisma.thread.upsert({
+            where: {
+              accountId_gmailThreadId: {
+                accountId: gmailAccount.id,
+                gmailThreadId: rawThread.id,
+              },
+            },
+            update: {
+              subject,
+              snippet,
+              isUnread,
+              isArchived,
+              isSnoozed,
+              lastMessageAt,
+              internalDate: new Date(firstInternalTime),
+            },
+            create: {
+              accountId: gmailAccount.id,
+              gmailThreadId: rawThread.id,
+              subject,
+              snippet,
+              isUnread,
+              isArchived,
+              isSnoozed,
+              lastMessageAt,
+              internalDate: new Date(firstInternalTime),
+              priority: "normal",
+              category: "fyi",
+            },
+          });
+
+          // Upsert Messages for this thread
+          for (const msg of messages) {
+            const msgHeaders = msg.payload?.headers || [];
+            const getMHeader = (n: string) =>
+              msgHeaders.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
+
+            const mFrom = getMHeader("From") || firstFrom;
+            const { name: mFromName, email: mFromEmail } = parseEmailAddress(mFrom);
+            const mTo = getMHeader("To");
+            const { name: mToName, email: mToEmail } = parseEmailAddress(mTo);
+            const mSubject = getMHeader("Subject") || subject;
+            const mSnippet = msg.snippet || "";
+            const plainTextBody = extractPlainTextBody(msg.payload) || mSnippet;
+
+            const mInternalTime = msg.internalDate ? parseInt(msg.internalDate, 10) : Date.now();
+            const mDate = new Date(mInternalTime);
+
+            await prisma.email.upsert({
               where: {
-                accountId_gmailThreadId: {
+                accountId_gmailId: {
                   accountId: gmailAccount.id,
-                  gmailThreadId: rawThread.id,
+                  gmailId: msg.id,
                 },
               },
               update: {
-                subject,
-                snippet,
-                isUnread,
-                isArchived,
-                isSnoozed,
-                lastMessageAt,
-                internalDate: new Date(firstInternalTime),
+                subject: mSubject,
+                fromEmail: mFromEmail,
+                fromName: mFromName,
+                toEmail: mToEmail,
+                toName: mToName,
+                snippet: mSnippet,
+                bodyText: plainTextBody,
+                internalDate: mDate,
+                isUnread: msg.labelIds?.includes("UNREAD") || false,
               },
               create: {
                 accountId: gmailAccount.id,
+                gmailId: msg.id,
                 gmailThreadId: rawThread.id,
-                subject,
-                snippet,
-                isUnread,
-                isArchived,
-                isSnoozed,
-                lastMessageAt,
-                internalDate: new Date(firstInternalTime),
-                priority: "normal",
-                category: "fyi",
+                threadId: dbThread.id,
+                subject: mSubject,
+                fromEmail: mFromEmail,
+                fromName: mFromName,
+                toEmail: mToEmail,
+                toName: mToName,
+                snippet: mSnippet,
+                bodyText: plainTextBody,
+                internalDate: mDate,
+                isUnread: msg.labelIds?.includes("UNREAD") || false,
               },
             });
-
-            // Upsert Messages in parallel
-            await Promise.all(
-              messages.map(async (msg) => {
-                const msgHeaders = msg.payload?.headers || [];
-                const getMHeader = (n: string) =>
-                  msgHeaders.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
-
-                const mFrom = getMHeader("From") || firstFrom;
-                const { name: mFromName, email: mFromEmail } = parseEmailAddress(mFrom);
-                const mTo = getMHeader("To");
-                const { name: mToName, email: mToEmail } = parseEmailAddress(mTo);
-                const mSubject = getMHeader("Subject") || subject;
-                const mSnippet = msg.snippet || "";
-                const plainTextBody = extractPlainTextBody(msg.payload) || mSnippet;
-
-                const mInternalTime = msg.internalDate ? parseInt(msg.internalDate, 10) : Date.now();
-                const mDate = new Date(mInternalTime);
-
-                await prisma.email.upsert({
-                  where: {
-                    accountId_gmailId: {
-                      accountId: gmailAccount.id,
-                      gmailId: msg.id,
-                    },
-                  },
-                  update: {
-                    subject: mSubject,
-                    fromEmail: mFromEmail,
-                    fromName: mFromName,
-                    toEmail: mToEmail,
-                    toName: mToName,
-                    snippet: mSnippet,
-                    bodyText: plainTextBody,
-                    internalDate: mDate,
-                    isUnread: msg.labelIds?.includes("UNREAD") || false,
-                  },
-                  create: {
-                    accountId: gmailAccount.id,
-                    gmailId: msg.id,
-                    gmailThreadId: rawThread.id,
-                    threadId: dbThread.id,
-                    subject: mSubject,
-                    fromEmail: mFromEmail,
-                    fromName: mFromName,
-                    toEmail: mToEmail,
-                    toName: mToName,
-                    snippet: mSnippet,
-                    bodyText: plainTextBody,
-                    internalDate: mDate,
-                    isUnread: msg.labelIds?.includes("UNREAD") || false,
-                  },
-                });
-              })
-            );
-
-            // Link labels to Thread
-            const threadLabels = new Set<string>();
-            for (const m of messages) {
-              for (const lid of m.labelIds || []) {
-                const labelDbId = labelCache.get(lid);
-                if (labelDbId) threadLabels.add(labelDbId);
-              }
-            }
-
-            await Promise.all(
-              Array.from(threadLabels).map((labelId) =>
-                prisma.labelOnThread.upsert({
-                  where: {
-                    threadId_labelId: {
-                      threadId: dbThread.id,
-                      labelId,
-                    },
-                  },
-                  update: {},
-                  create: {
-                    threadId: dbThread.id,
-                    labelId,
-                  },
-                })
-              )
-            );
-
-            threadsSyncedCount++;
-          } catch (threadErr) {
-            console.error(`[Gmail Sync] Error processing thread ${rawThread.id}:`, threadErr);
           }
-        })
-      );
 
-      // Progressive status update so client gets incremental data
-      await prisma.syncState.update({
-        where: { id: syncState.id },
-        data: { totalThreadsSynced: threadsSyncedCount },
-      });
+          // Link labels to Thread
+          const threadLabels = new Set<string>();
+          for (const m of messages) {
+            for (const lid of m.labelIds || []) {
+              const labelDbId = labelCache.get(lid);
+              if (labelDbId) threadLabels.add(labelDbId);
+            }
+          }
+
+          for (const labelId of threadLabels) {
+            await prisma.labelOnThread.upsert({
+              where: {
+                threadId_labelId: {
+                  threadId: dbThread.id,
+                  labelId,
+                },
+              },
+              update: {},
+              create: {
+                threadId: dbThread.id,
+                labelId,
+              },
+            });
+          }
+
+          threadsSyncedCount++;
+        } catch (threadErr) {
+          console.error(`[Gmail Sync] Error processing thread ${rawThread.id}:`, threadErr);
+        }
+      }
     }
+
 
     // 6. Update SyncState -> status: "completed"
     await prisma.syncState.update({

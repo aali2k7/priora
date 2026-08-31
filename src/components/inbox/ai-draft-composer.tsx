@@ -17,6 +17,7 @@ export function AIDraftComposer({
   threadId,
   onSentSuccess,
 }: AIDraftComposerProps) {
+  const [draftsByTone, setDraftsByTone] = React.useState<Record<string, AIDraftResponse>>({});
   const [draft, setDraft] = React.useState<AIDraftResponse | null>(null);
   const [draftText, setDraftText] = React.useState("");
   const [activeTone, setActiveTone] = React.useState<ToneModifier>("concise");
@@ -27,6 +28,18 @@ export function AIDraftComposer({
 
   React.useEffect(() => {
     let isMounted = true;
+    const cacheKey = `${threadId}_${activeTone}`;
+
+    // Instant check from in-memory tone cache
+    if (draftsByTone[cacheKey]) {
+      const cached = draftsByTone[cacheKey];
+      setDraft(cached);
+      setDraftText(cached.draftText);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
 
     async function fetchDraft() {
       try {
@@ -38,6 +51,7 @@ export function AIDraftComposer({
           if (data.draft && isMounted) {
             setDraft(data.draft);
             setDraftText(data.draft.draftText);
+            setDraftsByTone((prev) => ({ ...prev, [cacheKey]: data.draft }));
             setIsLoading(false);
             return;
           }
@@ -50,17 +64,17 @@ export function AIDraftComposer({
       }
 
       if (isMounted) {
-        setDraft({
+        const fallbackDraft: AIDraftResponse = {
           threadId,
           intentStrategy: `Responding with ${activeTone} style`,
           draftText:
             "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali",
           suggestedTone: activeTone,
           lastUpdated: "Just now",
-        });
-        setDraftText(
-          "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali"
-        );
+        };
+        setDraft(fallbackDraft);
+        setDraftText(fallbackDraft.draftText);
+        setDraftsByTone((prev) => ({ ...prev, [cacheKey]: fallbackDraft }));
         setIsLoading(false);
       }
     }
@@ -70,12 +84,19 @@ export function AIDraftComposer({
     return () => {
       isMounted = false;
     };
-  }, [threadId, activeTone]);
+  }, [threadId, activeTone, draftsByTone]);
 
   const handleToneSelect = (tone: ToneModifier) => {
-    setIsLoading(true);
     setActiveTone(tone);
     setErrorMessage(null);
+    const cacheKey = `${threadId}_${tone}`;
+    if (draftsByTone[cacheKey]) {
+      setDraft(draftsByTone[cacheKey]);
+      setDraftText(draftsByTone[cacheKey].draftText);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
   };
 
   const handleSend = async () => {
@@ -115,20 +136,9 @@ export function AIDraftComposer({
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
-        <div className="flex items-center space-x-2 text-xs text-[var(--text-secondary)]">
-          <RefreshCw className="h-3 w-3 animate-spin text-[#3F5F8F]" />
-          <span>Generating AI reply draft...</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
-      className="space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4"
+      className="space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 transition-all duration-150"
       onKeyDown={handleKeyDown}
     >
       {/* Error Alert */}
@@ -146,15 +156,20 @@ export function AIDraftComposer({
 
       {/* Draft Header & Tone Selection */}
       <div className="flex flex-col justify-between gap-2 border-b border-[var(--border-subtle)] pb-2 sm:flex-row sm:items-center">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 min-h-[22px]">
           <span className="text-xs font-semibold tracking-wider text-[#3F5F8F] uppercase dark:text-[#7CA1D8]">
             Reply Draft
           </span>
-          {draft && (
+          {isLoading ? (
+            <span className="flex items-center space-x-1 text-[11px] text-[var(--text-muted)] italic">
+              <RefreshCw className="h-2.5 w-2.5 animate-spin text-[#3F5F8F] dark:text-[#7CA1D8]" />
+              <span>Generating {activeTone} reply...</span>
+            </span>
+          ) : draft ? (
             <span className="max-w-xs truncate text-[11px] text-[var(--text-muted)] italic sm:max-w-md">
               • {draft.intentStrategy}
             </span>
-          )}
+          ) : null}
         </div>
 
         {/* Tone Selector */}
@@ -171,7 +186,7 @@ export function AIDraftComposer({
                 key={t.id}
                 type="button"
                 onClick={() => handleToneSelect(t.id as ToneModifier)}
-                className={`cursor-pointer rounded px-2 py-0.5 text-[11px] transition-colors ${
+                className={`cursor-pointer rounded px-2 py-0.5 text-[11px] transition-colors duration-150 ${
                   isSelected
                     ? "border border-[var(--border-subtle)] bg-[var(--bg-surface-selected)] font-semibold text-[#3F5F8F] dark:text-[#7CA1D8]"
                     : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
@@ -184,13 +199,18 @@ export function AIDraftComposer({
         </div>
       </div>
 
-      {/* Draft Text Area */}
-      <Textarea
-        value={draftText}
-        onChange={(e) => setDraftText(e.target.value)}
-        placeholder="Type or edit your response..."
-        className="min-h-[110px] border-[var(--border-subtle)] bg-[var(--bg-canvas)] font-sans text-xs leading-relaxed text-[var(--text-primary)]"
-      />
+      {/* Draft Text Area with Smooth Transition and Stable Layout */}
+      <div className="relative">
+        <Textarea
+          value={draftText}
+          onChange={(e) => setDraftText(e.target.value)}
+          placeholder={isLoading ? "Generating draft..." : "Type or edit your response..."}
+          disabled={isLoading}
+          className={`min-h-[110px] border-[var(--border-subtle)] bg-[var(--bg-canvas)] font-sans text-xs leading-relaxed text-[var(--text-primary)] transition-opacity duration-150 ${
+            isLoading ? "opacity-40 animate-pulse" : "opacity-100"
+          }`}
+        />
+      </div>
 
       {/* Actions Toolbar */}
       <div className="flex flex-col justify-between gap-2 pt-1 sm:flex-row sm:items-center">
@@ -217,8 +237,8 @@ export function AIDraftComposer({
           variant="primary"
           size="sm"
           onClick={handleSend}
-          disabled={isSending}
-          className="space-x-1.5"
+          disabled={isSending || isLoading || !draftText.trim()}
+          className="space-x-1.5 transition-all duration-150"
         >
           {isSending ? (
             <>

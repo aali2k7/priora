@@ -322,8 +322,11 @@ export function ComposeModal({
         <Textarea
           value={bodyText}
           onChange={(e) => setBodyText(e.target.value)}
-          placeholder="Compose your email message..."
-          className="min-h-[160px] border-[var(--border-subtle)] bg-[var(--bg-canvas)] font-sans text-xs leading-relaxed text-[var(--text-primary)]"
+          placeholder={isAiGenerating ? "Generating email draft with AI..." : "Compose your email message..."}
+          disabled={isAiGenerating}
+          className={`min-h-[160px] border-[var(--border-subtle)] bg-[var(--bg-canvas)] font-sans text-xs leading-relaxed text-[var(--text-primary)] transition-opacity duration-150 ${
+            isAiGenerating ? "opacity-40 animate-pulse" : "opacity-100"
+          }`}
         />
 
         {/* Modal Footer Actions */}

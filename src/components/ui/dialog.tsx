@@ -32,11 +32,11 @@ export function Dialog({ isOpen, onClose, title, description, children }: Dialog
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/40 dark:bg-black/70 transition-opacity"
+        className="fixed inset-0 bg-black/40 dark:bg-black/70 transition-opacity duration-150"
         onClick={onClose}
       />
       {/* Content Card */}
-      <div className="relative z-50 w-full max-w-lg rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-elevation transition-all">
+      <div className="relative z-50 w-full max-w-lg rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-elevation transition-all duration-150">
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
           <div>
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
@@ -44,7 +44,7 @@ export function Dialog({ isOpen, onClose, title, description, children }: Dialog
           </div>
           <button
             onClick={onClose}
-            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors focus-ring"
+            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors duration-150 focus-ring cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>

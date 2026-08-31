@@ -13,10 +13,10 @@ const CANDIDATE_MODELS = [
   "openai/gpt-oss-20b",
   "groq/compound-mini",
   "qwen/qwen3.6-27b",
-  "llama-3.1-8b-instant",
+  "qwen/qwen3.8-27b",
 ].filter(Boolean) as string[];
 
-let activeWorkingModel = CANDIDATE_MODELS[0];
+let activeWorkingModel = "openai/gpt-oss-20b";
 export const GROQ_MODEL = activeWorkingModel;
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -275,11 +275,14 @@ export async function generateDraftWithGroq(
   tone: ToneModifier = "concise",
   customInstructions?: string
 ): Promise<{ draftText: string; intentStrategy: string }> {
-  const conversationText = messages
-    .map(
-      (m, idx) =>
-        `--- Message #${idx + 1} ---\nFrom: ${m.sender}\nTo: ${m.recipient}\nDate: ${m.timestamp}\n\n${m.bodyText || m.snippet || ""}`
-    )
+  // Focus on the most recent 3 messages for high-speed, context-accurate drafting
+  const recentMessages = messages.slice(-3);
+  const conversationText = recentMessages
+    .map((m, idx) => {
+      const rawBody = m.bodyText || m.snippet || "";
+      const trimmedBody = rawBody.length > 750 ? rawBody.slice(0, 750) + "..." : rawBody;
+      return `--- Message #${idx + 1} ---\nFrom: ${m.sender}\nTo: ${m.recipient}\nDate: ${m.timestamp}\n\n${trimmedBody}`;
+    })
     .join("\n\n");
 
   const prompt = `Subject: ${subject}
