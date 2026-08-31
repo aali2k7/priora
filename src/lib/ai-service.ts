@@ -12,6 +12,7 @@ import {
 import {
   analyzeEmailThreadWithGemini,
   generateDraftWithGemini,
+  generateNewEmailDraftWithGemini,
 } from "@/lib/gemini";
 import { isAIAvailable } from "@/lib/groq";
 
@@ -66,7 +67,9 @@ export class AIService {
   /**
    * Generates executive briefing digest strictly based on real database threads.
    */
-  static async getExecutiveBriefing(userId?: string): Promise<ExecutiveBriefing> {
+  static async getExecutiveBriefing(
+    userId?: string
+  ): Promise<ExecutiveBriefing> {
     try {
       const whereClause = userId
         ? { account: { userId }, isArchived: false }
@@ -86,7 +89,8 @@ export class AIService {
       if (threads.length === 0) {
         return {
           date: today,
-          digestSummary: "No active threads found in local 15-day working dataset. Syncing inbox...",
+          digestSummary:
+            "No active threads found in local 15-day working dataset. Syncing inbox...",
           urgentItemCount: 0,
           waitingOnCount: 0,
           topActionItems: [],
@@ -107,15 +111,22 @@ export class AIService {
       const topActionItems: ExtractedTask[] = [];
 
       for (const t of urgentThreads.slice(0, 5)) {
-        const keyInfo = (typeof t.keyInformation === "object" && t.keyInformation !== null
-          ? t.keyInformation
-          : {}) as Record<string, unknown>;
-        const recAction = (typeof t.recommendedAction === "object" && t.recommendedAction !== null
-          ? t.recommendedAction
-          : {}) as Record<string, unknown>;
+        const keyInfo = (
+          typeof t.keyInformation === "object" && t.keyInformation !== null
+            ? t.keyInformation
+            : {}
+        ) as Record<string, unknown>;
+        const recAction = (
+          typeof t.recommendedAction === "object" &&
+          t.recommendedAction !== null
+            ? t.recommendedAction
+            : {}
+        ) as Record<string, unknown>;
 
         const title =
-          (typeof recAction.actionTitle === "string" ? recAction.actionTitle : null) ||
+          (typeof recAction.actionTitle === "string"
+            ? recAction.actionTitle
+            : null) ||
           t.keyDecisionRequired ||
           t.subject ||
           "Action Required";
@@ -124,10 +135,16 @@ export class AIService {
           id: `task_${t.id}`,
           threadId: t.id,
           title,
-          deadline: typeof keyInfo.requestedDates === "string" ? keyInfo.requestedDates : undefined,
+          deadline:
+            typeof keyInfo.requestedDates === "string"
+              ? keyInfo.requestedDates
+              : undefined,
           isCompleted: false,
           priority: t.priority === "urgent" ? "high" : "medium",
-          assigneeName: typeof keyInfo.studentName === "string" ? keyInfo.studentName : undefined,
+          assigneeName:
+            typeof keyInfo.studentName === "string"
+              ? keyInfo.studentName
+              : undefined,
         });
       }
 
@@ -144,7 +161,10 @@ export class AIService {
         topActionItems,
       };
     } catch (error: unknown) {
-      console.error("[AIService.getExecutiveBriefing] Error deriving briefing:", error);
+      console.error(
+        "[AIService.getExecutiveBriefing] Error deriving briefing:",
+        error
+      );
       const today = new Date().toLocaleDateString("en-US", {
         weekday: "short",
         month: "short",
@@ -185,19 +205,27 @@ export class AIService {
       });
 
       if (!thread) {
-        throw new Error(`[AIService] Thread not found in database: ${threadId}`);
+        throw new Error(
+          `[AIService] Thread not found in database: ${threadId}`
+        );
       }
 
       // 3. Return cached analysis if already analyzed in DB and not forced
-      if (thread.analyzedAt && !forceReanalyze && (thread.aiSummary || thread.executiveBrief)) {
+      if (
+        thread.analyzedAt &&
+        !forceReanalyze &&
+        (thread.aiSummary || thread.executiveBrief)
+      ) {
         return this.formatThreadToAISummary(thread as DbThreadWithEmails);
       }
 
       // 4. Format messages for Groq
       const messages = thread.emails.map((e) => ({
         sender: e.fromName ? `${e.fromName} <${e.fromEmail}>` : e.fromEmail,
-        recipient: e.toName ? `${e.toName} <${e.toEmail}>` : (e.toEmail || ""),
-        timestamp: e.internalDate ? new Date(e.internalDate).toLocaleString() : "Recent",
+        recipient: e.toName ? `${e.toName} <${e.toEmail}>` : e.toEmail || "",
+        timestamp: e.internalDate
+          ? new Date(e.internalDate).toLocaleString()
+          : "Recent",
         snippet: e.snippet || "",
         bodyText: e.bodyText || e.snippet || "",
       }));
@@ -206,14 +234,18 @@ export class AIService {
         messages.push({
           sender: "Sender",
           recipient: thread.account?.email || "Recipient",
-          timestamp: thread.lastMessageAt ? new Date(thread.lastMessageAt).toLocaleString() : "Recent",
+          timestamp: thread.lastMessageAt
+            ? new Date(thread.lastMessageAt).toLocaleString()
+            : "Recent",
           snippet: thread.snippet,
           bodyText: thread.snippet,
         });
       }
 
       // 5. Call Groq API
-      console.log(`[AIService] Running Groq analysis for thread ${thread.id} ("${thread.subject}")...`);
+      console.log(
+        `[AIService] Running Groq analysis for thread ${thread.id} ("${thread.subject}")...`
+      );
       const analysis = await analyzeEmailThreadWithGemini({
         subject: thread.subject || "(No Subject)",
         messages,
@@ -232,7 +264,8 @@ export class AIService {
           importanceScore: analysis.importanceScore,
           actionRequired: analysis.actionRequired,
           keyDecisionRequired: analysis.keyDecisionRequired,
-          keyInformation: analysis.keyInformation as unknown as Prisma.InputJsonValue,
+          keyInformation:
+            analysis.keyInformation as unknown as Prisma.InputJsonValue,
           aiInsights: analysis.aiInsights as unknown as Prisma.InputJsonValue,
           recommendedAction: {
             actionTitle: analysis.suggestedAction,
@@ -248,7 +281,9 @@ export class AIService {
         },
       });
 
-      console.log(`[AIService] Successfully persisted Groq analysis in DB for thread ${thread.id}`);
+      console.log(
+        `[AIService] Successfully persisted Groq analysis in DB for thread ${thread.id}`
+      );
       return this.formatThreadToAISummary(updatedThread as DbThreadWithEmails);
     };
 
@@ -294,7 +329,10 @@ export class AIService {
         try {
           return await this.analyzeThreadWithGemini(thread.id);
         } catch (aiError) {
-          console.error(`[AIService] On-demand Groq analysis failed for thread ${thread.id}:`, aiError);
+          console.error(
+            `[AIService] On-demand Groq analysis failed for thread ${thread.id}:`,
+            aiError
+          );
           return {
             threadId: thread.id,
             executiveBrief: "Analysis unavailable",
@@ -309,7 +347,10 @@ export class AIService {
         bulletPoints: ["AI analysis is pending for this thread."],
       };
     } catch (error: unknown) {
-      console.error(`[AIService.getThreadSummary] Error for thread ${threadId}:`, error);
+      console.error(
+        `[AIService.getThreadSummary] Error for thread ${threadId}:`,
+        error
+      );
       return {
         threadId,
         executiveBrief: "Analysis unavailable",
@@ -349,7 +390,8 @@ export class AIService {
       if (thread.suggestedReply && tone === "concise" && !customInstructions) {
         return {
           threadId: thread.id,
-          intentStrategy: "Strategy: Formulated from persisted AI thread analysis.",
+          intentStrategy:
+            "Strategy: Formulated from persisted AI thread analysis.",
           draftText: thread.suggestedReply,
           suggestedTone: "concise",
           lastUpdated: thread.analyzedAt ? "Analyzed recently" : "Just now",
@@ -362,7 +404,9 @@ export class AIService {
           const messages = thread.emails.map((e) => ({
             sender: e.fromName || e.fromEmail,
             recipient: e.toName || e.toEmail || "",
-            timestamp: e.internalDate ? new Date(e.internalDate).toLocaleString() : "",
+            timestamp: e.internalDate
+              ? new Date(e.internalDate).toLocaleString()
+              : "",
             snippet: e.snippet || "",
             bodyText: e.bodyText || e.snippet || "",
           }));
@@ -392,11 +436,16 @@ export class AIService {
             lastUpdated: "Just now",
           };
         } catch (aiError) {
-          console.warn(`[AIService] Groq draft generation failed for tone ${tone}:`, aiError);
+          console.warn(
+            `[AIService] Groq draft generation failed for tone ${tone}:`,
+            aiError
+          );
         }
       }
 
-      const defaultText = thread.suggestedReply || "Thank you for your email. I have received your message and will follow up shortly.";
+      const defaultText =
+        thread.suggestedReply ||
+        "Thank you for your email. I have received your message and will follow up shortly.";
       return {
         threadId: thread.id,
         intentStrategy: `Strategy: Responding in ${tone} tone.`,
@@ -405,15 +454,45 @@ export class AIService {
         lastUpdated: "Just now",
       };
     } catch (error: unknown) {
-      console.error(`[AIService.getDraftResponse] Error for thread ${threadId}:`, error);
+      console.error(
+        `[AIService.getDraftResponse] Error for thread ${threadId}:`,
+        error
+      );
       return {
         threadId,
         intentStrategy: `Strategy: Standard response in ${tone} tone.`,
-        draftText: "Thank you for reaching out. I have received your message and will follow up shortly.",
+        draftText:
+          "Thank you for reaching out. I have received your message and will follow up shortly.",
         suggestedTone: tone,
         lastUpdated: "Just now",
       };
     }
+  }
+
+  /**
+   * Generates a new standalone email draft based strictly on user instructions.
+   */
+  static async generateNewEmailDraft(params: {
+    instruction: string;
+    recipient?: string;
+    subject?: string;
+    tone?: ToneModifier;
+    senderName?: string;
+  }): Promise<{ draftText: string; intentStrategy: string }> {
+    const tone = params.tone || "concise";
+    if (!isAIAvailable()) {
+      throw new Error(
+        "AI service is currently unavailable. Please check your API key configuration."
+      );
+    }
+
+    return await generateNewEmailDraftWithGemini(
+      params.instruction,
+      params.recipient,
+      params.subject,
+      tone,
+      params.senderName
+    );
   }
 
   /**
@@ -452,7 +531,10 @@ export class AIService {
         await new Promise((resolve) => setTimeout(resolve, 1500));
       } catch (err) {
         errors++;
-        console.warn(`[AIService] Notice: Background analysis skipped for thread ${item.id}:`, err);
+        console.warn(
+          `[AIService] Notice: Background analysis skipped for thread ${item.id}:`,
+          err
+        );
       }
     }
 
@@ -462,7 +544,9 @@ export class AIService {
   /**
    * Helper to format a Prisma Thread into the AISummary structure.
    */
-  private static formatThreadToAISummary(thread: DbThreadWithEmails): AISummary {
+  private static formatThreadToAISummary(
+    thread: DbThreadWithEmails
+  ): AISummary {
     const rawInsights = Array.isArray(thread.aiInsights)
       ? thread.aiInsights.filter((i): i is string => typeof i === "string")
       : [];
@@ -471,10 +555,12 @@ export class AIService {
       rawInsights.length > 0
         ? rawInsights
         : thread.snippet
-        ? [thread.snippet.slice(0, 160)]
-        : ["No additional bullet points available."];
+          ? [thread.snippet.slice(0, 160)]
+          : ["No additional bullet points available."];
 
-    const readingTimeSaved = this.calculateReadingTimeSaved(thread.emails || []);
+    const readingTimeSaved = this.calculateReadingTimeSaved(
+      thread.emails || []
+    );
 
     return {
       threadId: thread.id,
@@ -489,23 +575,29 @@ export class AIService {
       actionRequired: thread.actionRequired ?? undefined,
       readingTimeSaved,
       keyInformation:
-        typeof thread.keyInformation === "object" && thread.keyInformation !== null
+        typeof thread.keyInformation === "object" &&
+        thread.keyInformation !== null
           ? (thread.keyInformation as unknown as KeyInformationData)
           : undefined,
       aiInsights: rawInsights.length > 0 ? rawInsights : undefined,
       recommendedAction:
-        typeof thread.recommendedAction === "object" && thread.recommendedAction !== null
+        typeof thread.recommendedAction === "object" &&
+        thread.recommendedAction !== null
           ? (thread.recommendedAction as unknown as RecommendedActionData)
           : undefined,
       suggestedReply: thread.suggestedReply || undefined,
-      analyzedAt: thread.analyzedAt ? new Date(thread.analyzedAt).toISOString() : undefined,
+      analyzedAt: thread.analyzedAt
+        ? new Date(thread.analyzedAt).toISOString()
+        : undefined,
     };
   }
 
   /**
    * Estimates reading time saved.
    */
-  private static calculateReadingTimeSaved(emails: Array<{ bodyText: string | null; snippet: string | null }>): string {
+  private static calculateReadingTimeSaved(
+    emails: Array<{ bodyText: string | null; snippet: string | null }>
+  ): string {
     const totalWords = emails.reduce((acc, e) => {
       const text = e.bodyText || e.snippet || "";
       return acc + text.split(/\s+/).length;

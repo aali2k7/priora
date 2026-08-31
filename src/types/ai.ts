@@ -1,4 +1,5 @@
-export type ToneModifier = "concise" | "formal" | "direct_refusal" | "request_call";
+export type ToneModifier =
+  "concise" | "formal" | "direct_refusal" | "request_call" | "friendly";
 
 export interface ExtractedTask {
   id: string;
@@ -79,4 +80,3 @@ export interface ExecutiveBriefing {
   waitingOnCount: number;
   topActionItems: ExtractedTask[];
 }
-

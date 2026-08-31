@@ -1,6 +1,7 @@
 import {
   analyzeEmailThreadWithGroq,
   generateDraftWithGroq,
+  generateNewEmailDraftWithGroq,
   testGroqConnection,
   ThreadMessageInput,
   ThreadAnalysisInput,
@@ -12,7 +13,12 @@ export type { ThreadMessageInput, ThreadAnalysisInput };
 
 export const GEMINI_MODEL = GROQ_MODEL;
 
-export async function testGeminiConnection(): Promise<{ success: boolean; model: string; message: string; latencyMs?: number }> {
+export async function testGeminiConnection(): Promise<{
+  success: boolean;
+  model: string;
+  message: string;
+  latencyMs?: number;
+}> {
   const result = await testGroqConnection();
   return {
     success: result.success,
@@ -24,4 +30,5 @@ export async function testGeminiConnection(): Promise<{ success: boolean; model:
 
 export const analyzeEmailThreadWithGemini = analyzeEmailThreadWithGroq;
 export const generateDraftWithGemini = generateDraftWithGroq;
+export const generateNewEmailDraftWithGemini = generateNewEmailDraftWithGroq;
 export { isAIAvailable };

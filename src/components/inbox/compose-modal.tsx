@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  User,
 } from "lucide-react";
 
 interface ComposeModalProps {
@@ -53,6 +52,8 @@ export function ComposeModal({
       setTo(initialTo);
       setSubject(initialSubject);
       setBodyText(initialBody);
+      setCc("");
+      setShowCc(false);
       setErrorMessage(null);
       setSuccessMessage(null);
       setShowAiPrompt(false);
@@ -95,7 +96,9 @@ export function ComposeModal({
         return;
       }
 
-      setSuccessMessage("Email dispatched successfully from your Gmail account.");
+      setSuccessMessage(
+        "Email dispatched successfully from your Gmail account."
+      );
       setIsSending(false);
 
       setTimeout(() => {
@@ -103,56 +106,51 @@ export function ComposeModal({
         onClose();
       }, 1200);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unexpected error sending email";
+      const msg =
+        err instanceof Error ? err.message : "Unexpected error sending email";
       setErrorMessage(msg);
       setIsSending(false);
     }
   };
 
-  const handleAiDraft = async (tone: "concise" | "formal" | "executive" | "friendly") => {
+  const handleAiDraft = async (tone: "concise" | "formal" | "friendly") => {
     setIsAiGenerating(true);
     setErrorMessage(null);
 
     try {
-      // If user typed a custom prompt or topic, use it
-      const topic = aiPrompt.trim() || subject.trim() || "Executive follow-up";
-      const res = await fetch("/api/ai/draft?tone=" + tone, {
+      const instruction =
+        aiPrompt.trim() ||
+        subject.trim() ||
+        bodyText.trim() ||
+        "Compose a new email";
+      const res = await fetch("/api/ai/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          topic,
+          instruction,
+          recipient: to.trim() || undefined,
+          subject: subject.trim() || undefined,
           tone,
-          context: bodyText || `Email to ${to || "recipient"} regarding ${subject || "topic"}`,
         }),
-      }).catch(() => null);
+      });
 
-      if (res && res.ok) {
-        const data = await res.json();
-        if (data.draft?.draftText) {
-          setBodyText(data.draft.draftText);
-          setShowAiPrompt(false);
-          setIsAiGenerating(false);
-          return;
-        }
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.draft?.draftText) {
+        setBodyText(data.draft.draftText);
+        setShowAiPrompt(false);
+        return;
       }
 
-      // High-quality executive client-side template fallback
-      const greeting = to ? `Hi ${to.split("@")[0].replace(/[._]/g, " ")},` : "Hello,";
-      let drafted = "";
-      if (tone === "concise") {
-        drafted = `${greeting}\n\nThank you for your note. I've reviewed the details and agree with the proposed direction. Let's proceed as planned.\n\nBest regards,\n`;
-      } else if (tone === "formal") {
-        drafted = `${greeting}\n\nThank you for reaching out. I have carefully reviewed the matter and appreciate the comprehensive overview provided. Please find my full confirmation attached to move forward.\n\nSincerely,\n`;
-      } else if (tone === "friendly") {
-        drafted = `${greeting}\n\nGreat connecting with you! Everything looks fantastic on my end, looking forward to working together on this.\n\nCheers,\n`;
-      } else {
-        drafted = `${greeting}\n\nFollowing up on our discussion regarding ${subject || "the strategic initiatives"}. The key deliverables are confirmed for execution.\n\nBest regards,\n`;
-      }
-
-      setBodyText(drafted);
-      setShowAiPrompt(false);
-    } catch (err) {
+      setErrorMessage(
+        data.error ||
+          "Failed to generate AI draft. Please check your AI connection and try again."
+      );
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "AI generation error occurred";
       console.warn("[ComposeModal] AI generation error:", err);
+      setErrorMessage(msg);
     } finally {
       setIsAiGenerating(false);
     }
@@ -176,18 +174,20 @@ export function ComposeModal({
       <div className="space-y-3 pt-1" onKeyDown={handleKeyDown}>
         {/* Error Alert */}
         {errorMessage && (
-          <div className="flex items-start space-x-2 rounded-md bg-[var(--status-urgent-subtle)] border border-[var(--status-urgent-border)] p-3 text-xs text-[var(--status-urgent)]">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="flex items-start space-x-2 rounded-md border border-[var(--status-urgent-border)] bg-[var(--status-urgent-subtle)] p-3 text-xs text-[var(--status-urgent)]">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <div className="flex-1">
               <p className="font-semibold">Unable to send</p>
-              <p className="mt-0.5 text-[11px] leading-relaxed opacity-90">{errorMessage}</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed opacity-90">
+                {errorMessage}
+              </p>
             </div>
           </div>
         )}
 
         {/* Success Alert */}
         {successMessage && (
-          <div className="flex items-center space-x-2 rounded-md bg-[var(--status-success-subtle)] border border-[var(--status-success-border)] p-3 text-xs text-[var(--status-success)]">
+          <div className="flex items-center space-x-2 rounded-md border border-[var(--status-success-border)] bg-[var(--status-success-subtle)] p-3 text-xs text-[var(--status-success)]">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span className="font-medium">{successMessage}</span>
           </div>
@@ -196,21 +196,23 @@ export function ComposeModal({
         {/* Recipients Input Row */}
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
-            <label className="w-12 text-xs font-medium text-[var(--text-secondary)]">To:</label>
-            <div className="flex-1 relative">
+            <label className="w-12 text-xs font-medium text-[var(--text-secondary)]">
+              To:
+            </label>
+            <div className="relative flex-1">
               <Input
                 type="email"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
                 placeholder="recipient@example.com"
-                className="text-xs h-8"
+                className="h-8 text-xs"
                 autoFocus
               />
             </div>
             <button
               type="button"
               onClick={() => setShowCc(!showCc)}
-              className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] px-1.5 py-1 rounded cursor-pointer"
+              className="cursor-pointer rounded px-1.5 py-1 text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             >
               {showCc ? "Hide CC" : "CC"}
             </button>
@@ -218,14 +220,16 @@ export function ComposeModal({
 
           {showCc && (
             <div className="flex items-center space-x-2">
-              <label className="w-12 text-xs font-medium text-[var(--text-secondary)]">Cc:</label>
+              <label className="w-12 text-xs font-medium text-[var(--text-secondary)]">
+                Cc:
+              </label>
               <div className="flex-1">
                 <Input
                   type="email"
                   value={cc}
                   onChange={(e) => setCc(e.target.value)}
                   placeholder="colleague@example.com"
-                  className="text-xs h-8"
+                  className="h-8 text-xs"
                 />
               </div>
             </div>
@@ -233,30 +237,36 @@ export function ComposeModal({
 
           {/* Subject Row */}
           <div className="flex items-center space-x-2">
-            <label className="w-12 text-xs font-medium text-[var(--text-secondary)]">Subject:</label>
+            <label className="w-12 text-xs font-medium text-[var(--text-secondary)]">
+              Subject:
+            </label>
             <div className="flex-1">
               <Input
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="Email Subject"
-                className="text-xs h-8"
+                className="h-8 text-xs"
               />
             </div>
           </div>
         </div>
 
         {/* AI Assist Toolbar */}
-        <div className="rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-2 space-y-2">
+        <div className="space-y-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-2">
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => setShowAiPrompt(!showAiPrompt)}
-              className="flex items-center space-x-1.5 text-xs font-medium text-[#3F5F8F] dark:text-[#7CA1D8] hover:underline cursor-pointer"
+              className="flex cursor-pointer items-center space-x-1.5 text-xs font-medium text-[#3F5F8F] hover:underline dark:text-[#7CA1D8]"
             >
               <Sparkles className="h-3.5 w-3.5" />
               <span>Draft with AI Assistant</span>
-              {showAiPrompt ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {showAiPrompt ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
             </button>
 
             {/* Quick Tone Buttons */}
@@ -267,7 +277,7 @@ export function ComposeModal({
                   type="button"
                   onClick={() => handleAiDraft(t)}
                   disabled={isAiGenerating}
-                  className="px-2 py-0.5 text-[10px] uppercase font-semibold tracking-wider rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] cursor-pointer disabled:opacity-50 transition-colors"
+                  className="cursor-pointer rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-50"
                 >
                   {t}
                 </button>
@@ -276,22 +286,33 @@ export function ComposeModal({
           </div>
 
           {showAiPrompt && (
-            <div className="pt-1 flex items-center space-x-2">
+            <div className="flex items-center space-x-2 pt-1">
               <Input
                 type="text"
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 placeholder="Describe what you want to write (e.g. Schedule call on Thursday)..."
-                className="text-xs h-7 flex-1"
+                className="h-7 flex-1 text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleAiDraft("concise");
+                  }
+                }}
               />
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => handleAiDraft("concise")}
                 disabled={isAiGenerating}
-                className="h-7 text-xs px-2"
+                className="h-7 px-2 text-xs"
               >
-                {isAiGenerating ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Generate"}
+                {isAiGenerating ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : (
+                  "Generate"
+                )}
               </Button>
             </div>
           )}
@@ -302,11 +323,11 @@ export function ComposeModal({
           value={bodyText}
           onChange={(e) => setBodyText(e.target.value)}
           placeholder="Compose your email message..."
-          className="min-h-[160px] text-xs font-sans text-[var(--text-primary)] bg-[var(--bg-canvas)] border-[var(--border-subtle)] leading-relaxed"
+          className="min-h-[160px] border-[var(--border-subtle)] bg-[var(--bg-canvas)] font-sans text-xs leading-relaxed text-[var(--text-primary)]"
         />
 
         {/* Modal Footer Actions */}
-        <div className="flex items-center justify-between pt-2 border-t border-[var(--border-subtle)]">
+        <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-2">
           <div className="flex items-center space-x-1 text-[11px] text-[var(--text-muted)]">
             <span>Press</span>
             <ShortcutKey>⌘</ShortcutKey>

@@ -5,7 +5,7 @@ import { AIDraftResponse, ToneModifier } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
-import { Send, RefreshCw, AlertCircle, Archive } from "lucide-react";
+import { Send, RefreshCw, AlertCircle } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
 
 interface AIDraftComposerProps {
@@ -13,7 +13,10 @@ interface AIDraftComposerProps {
   onSentSuccess: () => void;
 }
 
-export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProps) {
+export function AIDraftComposer({
+  threadId,
+  onSentSuccess,
+}: AIDraftComposerProps) {
   const [draft, setDraft] = React.useState<AIDraftResponse | null>(null);
   const [draftText, setDraftText] = React.useState("");
   const [activeTone, setActiveTone] = React.useState<ToneModifier>("concise");
@@ -40,18 +43,24 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
           }
         }
       } catch (err) {
-        console.warn("[AIDraftComposer] API fetch failed, using fallback:", err);
+        console.warn(
+          "[AIDraftComposer] API fetch failed, using fallback:",
+          err
+        );
       }
 
       if (isMounted) {
         setDraft({
           threadId,
           intentStrategy: `Responding with ${activeTone} style`,
-          draftText: "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali",
+          draftText:
+            "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali",
           suggestedTone: activeTone,
           lastUpdated: "Just now",
         });
-        setDraftText("Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali");
+        setDraftText(
+          "Hi,\n\nThank you for reaching out. I have reviewed the details and will follow up shortly.\n\nBest regards,\nAali"
+        );
         setIsLoading(false);
       }
     }
@@ -75,7 +84,11 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
     setIsSending(true);
 
     try {
-      const result = await EmailService.sendReply(threadId, draftText.trim(), archiveAfterSend);
+      const result = await EmailService.sendReply(
+        threadId,
+        draftText.trim(),
+        archiveAfterSend
+      );
 
       if (!result.success) {
         setErrorMessage(
@@ -104,7 +117,7 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
 
   if (isLoading) {
     return (
-      <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 space-y-2">
+      <div className="space-y-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
         <div className="flex items-center space-x-2 text-xs text-[var(--text-secondary)]">
           <RefreshCw className="h-3 w-3 animate-spin text-[#3F5F8F]" />
           <span>Generating AI reply draft...</span>
@@ -114,26 +127,31 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
   }
 
   return (
-    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 space-y-3" onKeyDown={handleKeyDown}>
+    <div
+      className="space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4"
+      onKeyDown={handleKeyDown}
+    >
       {/* Error Alert */}
       {errorMessage && (
-        <div className="flex items-start space-x-2 rounded-md bg-[var(--status-urgent-subtle)] border border-[var(--status-urgent-border)] p-3 text-xs text-[var(--status-urgent)]">
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+        <div className="flex items-start space-x-2 rounded-md border border-[var(--status-urgent-border)] bg-[var(--status-urgent-subtle)] p-3 text-xs text-[var(--status-urgent)]">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="flex-1">
             <p className="font-semibold">Failed to send reply</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed opacity-90">{errorMessage}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed opacity-90">
+              {errorMessage}
+            </p>
           </div>
         </div>
       )}
 
       {/* Draft Header & Tone Selection */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[var(--border-subtle)]">
+      <div className="flex flex-col justify-between gap-2 border-b border-[var(--border-subtle)] pb-2 sm:flex-row sm:items-center">
         <div className="flex items-center space-x-2">
-          <span className="text-xs font-semibold text-[#3F5F8F] dark:text-[#7CA1D8] uppercase tracking-wider">
+          <span className="text-xs font-semibold tracking-wider text-[#3F5F8F] uppercase dark:text-[#7CA1D8]">
             Reply Draft
           </span>
           {draft && (
-            <span className="text-[11px] text-[var(--text-muted)] italic truncate max-w-xs sm:max-w-md">
+            <span className="max-w-xs truncate text-[11px] text-[var(--text-muted)] italic sm:max-w-md">
               • {draft.intentStrategy}
             </span>
           )}
@@ -153,10 +171,10 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
                 key={t.id}
                 type="button"
                 onClick={() => handleToneSelect(t.id as ToneModifier)}
-                className={`px-2 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
+                className={`cursor-pointer rounded px-2 py-0.5 text-[11px] transition-colors ${
                   isSelected
-                    ? "bg-[var(--bg-surface-selected)] text-[#3F5F8F] dark:text-[#7CA1D8] font-semibold border border-[var(--border-subtle)]"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)]"
+                    ? "border border-[var(--border-subtle)] bg-[var(--bg-surface-selected)] font-semibold text-[#3F5F8F] dark:text-[#7CA1D8]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 {t.label}
@@ -171,11 +189,11 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
         value={draftText}
         onChange={(e) => setDraftText(e.target.value)}
         placeholder="Type or edit your response..."
-        className="min-h-[110px] font-sans text-xs text-[var(--text-primary)] bg-[var(--bg-canvas)] border-[var(--border-subtle)] leading-relaxed"
+        className="min-h-[110px] border-[var(--border-subtle)] bg-[var(--bg-canvas)] font-sans text-xs leading-relaxed text-[var(--text-primary)]"
       />
 
       {/* Actions Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+      <div className="flex flex-col justify-between gap-2 pt-1 sm:flex-row sm:items-center">
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-1 text-[11px] text-[var(--text-muted)]">
             <span>Press</span>
@@ -184,12 +202,12 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
             <span>to send</span>
           </div>
 
-          <label className="flex items-center space-x-1.5 text-[11px] text-[var(--text-secondary)] cursor-pointer select-none">
+          <label className="flex cursor-pointer items-center space-x-1.5 text-[11px] text-[var(--text-secondary)] select-none">
             <input
               type="checkbox"
               checked={archiveAfterSend}
               onChange={(e) => setArchiveAfterSend(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-[var(--border-subtle)] text-[#3F5F8F] focus:ring-0 cursor-pointer"
+              className="h-3.5 w-3.5 cursor-pointer rounded border-[var(--border-subtle)] text-[#3F5F8F] focus:ring-0"
             />
             <span>Archive on send</span>
           </label>
@@ -218,4 +236,3 @@ export function AIDraftComposer({ threadId, onSentSuccess }: AIDraftComposerProp
     </div>
   );
 }
-
