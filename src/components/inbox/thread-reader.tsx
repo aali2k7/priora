@@ -6,6 +6,7 @@ import { AISummary } from "@/types/ai";
 import { AISummaryBanner } from "./ai-summary-banner";
 import { AIDraftComposer } from "./ai-draft-composer";
 import { EventSuggestionBanner, DetectedEventInfo } from "./event-suggestion-banner";
+import { RelationshipContextCard } from "./relationship-context-card";
 import { Button } from "@/components/ui/button";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
 import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle, FileText, Reply } from "lucide-react";
@@ -253,6 +254,9 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
       {isReplyOpen && !isSentSuccess && (
         <AIDraftComposer threadId={thread.id} onSentSuccess={handleSentSuccess} />
       )}
+
+      {/* 3b. Relationship & Multi-Thread Historical Context */}
+      <RelationshipContextCard threadId={thread.id} />
 
       {/* 4. Conversation History (Clean Timeline with Thin Separators) */}
       <div className="space-y-3 pt-2">
