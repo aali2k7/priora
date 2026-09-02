@@ -25,6 +25,8 @@ model User {
   gmailAccounts GmailAccount[]
   syncStates    SyncState[]
   scheduledEmails ScheduledEmail[]
+  automationRules AutomationRule[]
+  automationLogs  AutomationLog[]
 }
 
 // 1b. Better Auth Session
@@ -258,4 +260,48 @@ model ScheduledEmail {
   @@index([status, scheduledAt])
   @@index([userId, status])
   @@index([accountId])
+}
+
+// 8. Email Automation Rules Engine
+model AutomationRule {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  isActive        Boolean         @default(true)
+  priorityOrder   Int             @default(0) // Higher integer = higher priority
+
+  // JSON Declarative Specifications
+  conditions      Json            // Array of RuleCondition
+  actions         Json            // Array of RuleAction
+
+  // Execution Metrics
+  totalTriggered  Int             @default(0)
+  lastTriggeredAt DateTime?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  logs            AutomationLog[]
+
+  @@index([userId, isActive])
+}
+
+// 9. Automation Activity & Audit Logs
+model AutomationLog {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ruleId          String?
+  rule            AutomationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  threadId        String?
+  emailSubject    String?
+  senderEmail     String?
+  actionExecuted  String          // "DRAFT_GENERATED" | "AUTO_SENT" | "LABEL_APPLIED" | "ABORTED"
+  status          String          // "SUCCESS" | "BLOCKED_GUARDRAIL" | "ERROR"
+  diagnostics     Json?           // Rule match evaluation details
+  createdAt       DateTime        @default(now())
+
+  @@index([userId, createdAt])
 }
