@@ -4,6 +4,7 @@ import React from "react";
 import { Clock, RefreshCw } from "lucide-react";
 import { AISummary } from "@/types/ai";
 import { Button } from "@/components/ui/button";
+import { PriorityExplainabilityPopover } from "./priority-explainability-popover";
 
 interface AISummaryBannerProps {
   summary: AISummary;
@@ -51,10 +52,12 @@ export function AISummaryBanner({ summary, onReanalyze, isReanalyzing }: AISumma
             </Button>
           )}
 
-          {isAnalyzed && typeof summary.urgencyScore === "number" && (
-            <span className="text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--bg-canvas)] px-2 py-0.5 rounded border border-[var(--border-subtle)]">
-              Score: {summary.urgencyScore}/100
-            </span>
+          {isAnalyzed && (
+            <PriorityExplainabilityPopover
+              urgencyScore={summary.urgencyScore}
+              importanceScore={summary.importanceScore}
+              category={summary.keyInformation?.program || undefined}
+            />
           )}
         </div>
       </div>
