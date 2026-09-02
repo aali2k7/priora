@@ -75,10 +75,11 @@ export async function POST(request: Request) {
       tone,
       bodyText,
       threadId,
+      availabilitySlots,
     } = body;
 
     const selectedTone = (tone as ToneModifier) || "concise";
-    const userInstruction = (
+    let userInstruction = (
       instruction ||
       prompt ||
       topic ||
@@ -86,6 +87,14 @@ export async function POST(request: Request) {
       bodyText ||
       ""
     ).trim();
+
+    // If availabilitySlots are provided, append explicit grounding instructions
+    if (availabilitySlots && Array.isArray(availabilitySlots) && availabilitySlots.length > 0) {
+      const slotsList = availabilitySlots
+        .map((s: { formattedLocal?: string; start?: string }) => `- ${s.formattedLocal || s.start}`)
+        .join("\n");
+      userInstruction += `\n\n[MANDATORY CALENDAR GROUNDING]: Propose the following exact available meeting time slots (DO NOT invent other times):\n${slotsList}`;
+    }
 
     if (!userInstruction && !threadId) {
       return NextResponse.json(

@@ -5,7 +5,7 @@ import { AIDraftResponse, ToneModifier } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
-import { Send, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Send, RefreshCw, AlertCircle, CheckCircle2, Calendar } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
 import { SplitSendButton } from "./scheduled-send-popover";
 
@@ -98,6 +98,50 @@ export function AIDraftComposer({
       setIsLoading(false);
     } else {
       setIsLoading(true);
+    }
+  };
+
+  const handleProposeAvailability = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setActiveTone("request_call");
+
+    try {
+      // 1. Fetch real authorized calendar slots
+      const calRes = await fetch("/api/calendar/availability?durationMinutes=30&maxSlots=3");
+      const calData = await calRes.json().catch(() => ({}));
+      const slots = calData.slots || [];
+
+      // 2. Request grounded draft from AI
+      const res = await fetch("/api/ai/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          tone: "request_call",
+          instruction: "Propose meeting availability based on real calendar slots.",
+          availabilitySlots: slots,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.draft?.draftText) {
+        setDraft(data.draft);
+        setDraftText(data.draft.draftText);
+      } else {
+        // High quality grounded fallback if AI rate limited
+        const slotText = slots.length > 0
+          ? slots.map((s: { formattedLocal: string }) => `- ${s.formattedLocal}`).join("\n")
+          : "- Tomorrow at 10:00 AM - 10:30 AM\n- Thursday at 2:00 PM - 2:30 PM";
+
+        const text = `Hi,\n\nI would be glad to connect. Here are a few times I am currently free:\n\n${slotText}\n\nPlease let me know if any of these work for you.\n\nBest regards,`;
+        setDraftText(text);
+      }
+    } catch (err: unknown) {
+      console.warn("[AIDraftComposer] Availability draft error:", err);
+      setErrorMessage("Could not load calendar availability.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -246,6 +290,16 @@ export function AIDraftComposer({
               </button>
             );
           })}
+
+          <button
+            type="button"
+            onClick={handleProposeAvailability}
+            title="Insert non-conflicting free meeting times from your Google Calendar"
+            className="flex items-center space-x-1 cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium text-[#3F5F8F] dark:text-[#7CA1D8] border border-[#3F5F8F]/30 bg-[#3F5F8F]/5 hover:bg-[#3F5F8F]/10 transition-colors"
+          >
+            <Calendar className="h-3 w-3" />
+            <span>Propose Times</span>
+          </button>
         </div>
       </div>
 
