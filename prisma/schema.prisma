@@ -24,6 +24,7 @@ model User {
   accounts      Account[]
   gmailAccounts GmailAccount[]
   syncStates    SyncState[]
+  scheduledEmails ScheduledEmail[]
 }
 
 // 1b. Better Auth Session
@@ -84,6 +85,7 @@ model GmailAccount {
   threads       Thread[]
   emails        Email[]
   labels        Label[]
+  scheduledEmails ScheduledEmail[]
 
   @@unique([userId, email])
   @@index([userId])
@@ -207,4 +209,53 @@ model LabelOnThread {
 
   @@id([threadId, labelId])
   @@index([labelId])
+}
+
+// 7. Scheduled Emails (Asynchronous Dispatch Queue & Lifecycle Cache)
+model ScheduledEmail {
+  id                  String       @id @default(cuid())
+  userId              String
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId           String
+  account             GmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  threadId            String?      // Optional Gmail Thread ID if scheduling a reply
+
+  // Recipient & Content Parameters (Plain Text Only — Zero Raw Binaries)
+  toEmails            Json         // Array of recipient emails: ["user@domain.com"]
+  toNames             Json?        // Array of recipient names
+  ccEmails            Json?        // Array of CC emails
+  bccEmails           Json?        // Array of BCC emails
+  subject             String
+  bodyTextEncrypted   String       @db.Text // Sanitized plaintext body
+
+  // Timing & Timezone Metadata
+  scheduledAt         DateTime     // Stored strictly in UTC
+  userTimezone        String       @default("UTC") // IANA Timezone identifier
+  userFormattedTime   String?      // Human-readable string e.g. "Tomorrow at 8:00 AM"
+
+  // State Machine & Concurrency Control
+  status              String       @default("SCHEDULED") // "DRAFT" | "SCHEDULED" | "SENDING" | "SENT" | "FAILED" | "CANCELLED"
+  idempotencyKey      String       // Client UUID preventing duplicate dispatches
+  lockWorkerId        String?      // Identifier of worker actively dispatching
+  lockAcquiredAt      DateTime?    // Timestamp of lock lease
+
+  // Diagnostics & Retries
+  attempts            Int          @default(0)
+  maxAttempts         Int          @default(3)
+  lastAttemptAt       DateTime?
+  lastErrorMessage    String?      @db.Text
+
+  // Dispatch Confirmation Metadata
+  sentGmailMessageId  String?
+  sentGmailThreadId   String?
+  sentAt              DateTime?
+  cancelledAt         DateTime?
+
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([accountId, idempotencyKey])
+  @@index([status, scheduledAt])
+  @@index([userId, status])
+  @@index([accountId])
 }
