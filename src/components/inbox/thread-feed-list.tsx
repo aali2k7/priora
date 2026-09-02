@@ -4,6 +4,7 @@ import React from "react";
 import { EmailThread } from "@/types/email";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FollowUpTriageBanner } from "./followup-triage-card";
 
 export type ViewMode = "inbox" | "focused" | "archived" | "scheduled";
 export type InboxSubFilter = "all" | "unread";
@@ -160,6 +161,9 @@ export function ThreadFeedList({
           />
         </div>
       </div>
+
+      {/* Awaiting Reply / Follow-Up Intelligence Banner */}
+      <FollowUpTriageBanner onSelectThread={onSelectThread} />
 
       {/* Structured List of Emails */}
       <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-[var(--border-subtle)]">
