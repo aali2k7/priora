@@ -5,6 +5,7 @@ import { EmailThread } from "@/types/email";
 import { AISummary } from "@/types/ai";
 import { AISummaryBanner } from "./ai-summary-banner";
 import { AIDraftComposer } from "./ai-draft-composer";
+import { EventSuggestionBanner, DetectedEventInfo } from "./event-suggestion-banner";
 import { Button } from "@/components/ui/button";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
 import { Archive, Clock, ChevronDown, ChevronUp, User, CheckCircle, FileText, Reply } from "lucide-react";
@@ -28,6 +29,36 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
   const [isArchiving, setIsArchiving] = React.useState(false);
   const [isSnoozing, setIsSnoozing] = React.useState(false);
   const [isSentSuccess, setIsSentSuccess] = React.useState(false);
+  const [isEventDismissed, setIsEventDismissed] = React.useState(false);
+
+  const detectedEvent: DetectedEventInfo | null = React.useMemo(() => {
+    if (isEventDismissed) return null;
+    const subj = thread.subject || "";
+    const isMeetingSubject = /meeting|sync|call|demo|catchup|interview|dinner|lunch|flight|webinar/i.test(subj);
+    const requestedDates = summary?.keyInformation?.requestedDates;
+
+    if (isMeetingSubject || requestedDates) {
+      const now = new Date();
+      const start = new Date(now);
+      start.setDate(start.getDate() + 1);
+      start.setHours(14, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(14, 30, 0, 0);
+
+      const formatted = requestedDates || `${start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} • 2:00 PM – 2:30 PM`;
+
+      return {
+        title: subj.replace(/^Re:\s*/i, ""),
+        startDateTime: start.toISOString(),
+        endDateTime: end.toISOString(),
+        formattedDate: formatted,
+        location: "Google Meet",
+        attendees: thread.participants.map((p) => p.email).filter(Boolean),
+        description: summary?.executiveBrief || thread.snippet || undefined,
+      };
+    }
+    return null;
+  }, [thread, summary, isEventDismissed]);
 
   React.useEffect(() => {
     let ignore = false;
@@ -207,6 +238,14 @@ export function ThreadReader({ thread, onThreadUpdated, autoOpenReply }: ThreadR
           summary={summary}
           onReanalyze={handleReanalyze}
           isReanalyzing={isReanalyzing}
+        />
+      )}
+
+      {/* 2b. Event Suggestion Banner if meeting/event detected */}
+      {detectedEvent && (
+        <EventSuggestionBanner
+          event={detectedEvent}
+          onDismiss={() => setIsEventDismissed(true)}
         />
       )}
 
