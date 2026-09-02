@@ -5,7 +5,7 @@ import { EmailThread } from "@/types/email";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ViewMode = "inbox" | "focused" | "archived";
+export type ViewMode = "inbox" | "focused" | "archived" | "scheduled";
 export type InboxSubFilter = "all" | "unread";
 export type FocusedSubFilter = "all" | "urgent" | "action_needed" | "vip";
 

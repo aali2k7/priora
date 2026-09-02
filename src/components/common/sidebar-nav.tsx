@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Menu,
   PenSquare,
+  Clock,
 } from "lucide-react";
 
 interface SidebarNavContentProps {
@@ -76,6 +77,12 @@ function SidebarNavContent({ urgentCount = 0, onOpenCompose }: SidebarNavContent
           href: "/inbox?view=archived",
           icon: Archive,
           isActive: pathname === "/inbox" && currentView === "archived",
+        },
+        {
+          label: "Scheduled",
+          href: "/inbox?view=scheduled",
+          icon: Clock,
+          isActive: pathname === "/inbox" && currentView === "scheduled",
         },
       ],
     },

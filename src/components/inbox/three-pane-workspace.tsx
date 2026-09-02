@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { EmailThread } from "@/types/email";
 import { ThreadFeedList, ViewMode, FocusedSubFilter, InboxSubFilter } from "./thread-feed-list";
 import { ThreadReader } from "./thread-reader";
+import { ScheduledOutboxView } from "./scheduled-outbox-view";
 import { Inbox, ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -278,6 +279,17 @@ export function ThreePaneWorkspace({
               Fetching 15-day rolling working dataset from local storage...
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Scheduled Outbox Management View
+  if (viewMode === "scheduled") {
+    return (
+      <div className="flex h-full w-full bg-[var(--bg-canvas)] overflow-hidden">
+        <div className="flex-1 min-w-0 h-full overflow-hidden">
+          <ScheduledOutboxView />
         </div>
       </div>
     );
