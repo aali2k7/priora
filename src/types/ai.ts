@@ -30,6 +30,17 @@ export interface RecommendedActionData {
   reasoning: string;
 }
 
+export interface ExtractedCommitment {
+  id: string;
+  task: string;
+  owner: "YOU" | "COUNTERPARTY" | "THIRD_PARTY";
+  ownerName?: string;
+  deadlineType: "HARD_DEADLINE" | "RELATIVE" | "TENTATIVE";
+  deadlineText?: string;
+  confidenceScore: number; // 0..100
+  isCompleted?: boolean;
+}
+
 export interface AISummary {
   threadId: string;
   executiveBrief: string; // 2-sentence executive summary
@@ -42,6 +53,7 @@ export interface AISummary {
   keyInformation?: KeyInformationData;
   aiInsights?: string[];
   recommendedAction?: RecommendedActionData;
+  commitments?: ExtractedCommitment[];
   suggestedReply?: string;
   analyzedAt?: string;
 }
@@ -55,6 +67,7 @@ export interface GeminiEmailAnalysis {
   importanceScore: number;
   actionRequired: boolean;
   actionItems: string[];
+  commitments?: ExtractedCommitment[];
   deadline: string | null;
   keyDecisionRequired: string | null;
   sentiment: "positive" | "neutral" | "urgent" | "frustrated" | "professional";

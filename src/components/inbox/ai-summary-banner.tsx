@@ -127,6 +127,66 @@ export function AISummaryBanner({ summary, onReanalyze, isReanalyzing }: AISumma
         </div>
       )}
 
+      {/* 5b. Extracted Commitments & Action Items (Multi-Party Attribution) */}
+      {isAnalyzed && summary.commitments && summary.commitments.length > 0 && (
+        <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] block">
+            Extracted Commitments & Deadlines
+          </span>
+          <div className="space-y-1.5">
+            {summary.commitments.map((comm) => (
+              <div
+                key={comm.id}
+                className="flex items-start justify-between rounded-md bg-[var(--bg-canvas)] p-2 text-xs border border-[var(--border-subtle)]"
+              >
+                <div className="flex items-start space-x-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border-subtle)] text-[#3F5F8F] focus:ring-0 cursor-pointer"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="font-medium text-[var(--text-primary)]">
+                      {comm.task}
+                    </span>
+                    <div className="flex items-center space-x-1.5 text-[10px] text-[var(--text-secondary)]">
+                      <span
+                        className={`rounded px-1.5 py-0.2 font-semibold uppercase tracking-wider ${
+                          comm.owner === "YOU"
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                            : comm.owner === "COUNTERPARTY"
+                            ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                            : "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                        }`}
+                      >
+                        {comm.ownerName ? `${comm.owner}: ${comm.ownerName}` : comm.owner}
+                      </span>
+
+                      {comm.deadlineText && (
+                        <span
+                          className={`rounded px-1.5 py-0.2 font-medium ${
+                            comm.deadlineType === "HARD_DEADLINE"
+                              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold"
+                              : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
+                          }`}
+                        >
+                          {comm.deadlineText}
+                        </span>
+                      )}
+
+                      {comm.confidenceScore < 80 && (
+                        <span className="rounded bg-amber-500/10 px-1 py-0.2 text-[9px] text-amber-600 dark:text-amber-400">
+                          Verify
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 6. Priora Insights (Clean Bullet List) */}
       {isAnalyzed && insights && insights.length > 0 && (
         <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1">

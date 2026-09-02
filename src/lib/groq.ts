@@ -227,6 +227,17 @@ JSON Schema format:
   "importanceScore": 0-100,
   "actionRequired": true | false,
   "actionItems": ["item 1", "item 2"],
+  "commitments": [
+    {
+      "id": "c1",
+      "task": "Review and sign the vendor agreement",
+      "owner": "YOU" | "COUNTERPARTY" | "THIRD_PARTY",
+      "ownerName": "string or null",
+      "deadlineType": "HARD_DEADLINE" | "RELATIVE" | "TENTATIVE",
+      "deadlineText": "Due Friday 5pm or null",
+      "confidenceScore": 0-100
+    }
+  ],
   "deadline": "string or null",
   "keyDecisionRequired": "string or null",
   "sentiment": "positive" | "neutral" | "urgent" | "frustrated" | "professional",
@@ -521,6 +532,25 @@ function normalizeAnalysis(
       )
     : [];
 
+  const rawCommitments = Array.isArray(data.commitments) ? data.commitments : [];
+  const commitments = rawCommitments.map((c: Record<string, unknown>, idx: number) => ({
+    id: typeof c.id === "string" ? c.id : `c_${idx + 1}`,
+    task: typeof c.task === "string" ? c.task : "Action item",
+    owner: (["YOU", "COUNTERPARTY", "THIRD_PARTY"].includes(String(c.owner))
+      ? String(c.owner)
+      : "YOU") as "YOU" | "COUNTERPARTY" | "THIRD_PARTY",
+    ownerName: typeof c.ownerName === "string" ? c.ownerName : undefined,
+    deadlineType: (["HARD_DEADLINE", "RELATIVE", "TENTATIVE"].includes(String(c.deadlineType))
+      ? String(c.deadlineType)
+      : "RELATIVE") as "HARD_DEADLINE" | "RELATIVE" | "TENTATIVE",
+    deadlineText: typeof c.deadlineText === "string" ? c.deadlineText : undefined,
+    confidenceScore:
+      typeof c.confidenceScore === "number"
+        ? Math.max(0, Math.min(100, Math.round(c.confidenceScore)))
+        : 85,
+    isCompleted: false,
+  }));
+
   const rawAiInsights = Array.isArray(data.aiInsights)
     ? data.aiInsights.filter((ins): ins is string => typeof ins === "string")
     : [];
@@ -578,6 +608,7 @@ function normalizeAnalysis(
       data.actionRequired ?? (actionItems.length > 0 || priority === "urgent")
     ),
     actionItems,
+    commitments,
     deadline,
     keyDecisionRequired,
     sentiment,
