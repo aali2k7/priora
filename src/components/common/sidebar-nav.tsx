@@ -90,6 +90,12 @@ function SidebarNavContent({ urgentCount = 0, onOpenCompose }: SidebarNavContent
       group: "SYSTEM",
       items: [
         {
+          label: "Automation",
+          href: "/automation",
+          icon: Zap,
+          isActive: pathname === "/automation",
+        },
+        {
           label: "Settings",
           href: "/settings",
           icon: Settings,
