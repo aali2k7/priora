@@ -17,6 +17,7 @@ import {
   Menu,
   PenSquare,
   Clock,
+  TrendingUp,
 } from "lucide-react";
 
 interface SidebarNavContentProps {
@@ -54,6 +55,12 @@ function SidebarNavContent({ urgentCount = 0, onOpenCompose }: SidebarNavContent
           href: "/dashboard",
           icon: Sparkles,
           isActive: pathname === "/briefing",
+        },
+        {
+          label: "Insights",
+          href: "/insights",
+          icon: TrendingUp,
+          isActive: pathname === "/insights",
         },
       ],
     },
