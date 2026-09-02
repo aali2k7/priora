@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AIService } from "@/lib/ai-service";
+import { ScheduledEmailService } from "@/lib/scheduled-email-service";
 import { ToneModifier } from "@/types/ai";
 
 export interface RuleCondition {
@@ -37,6 +38,7 @@ export interface RuleAction {
     labelName?: string;
     scheduleDelayMinutes?: number;
     allowlistDomains?: string[];
+    allowlistSenders?: string[];
   };
 }
 
@@ -49,7 +51,25 @@ export interface CreateRuleInput {
   actions: RuleAction[];
 }
 
+// In-memory Emergency Kill Switch registry (can also be persisted in Redis / DB)
+const userEmergencyKillSwitches = new Set<string>();
+
 export class AutomationService {
+  /**
+   * Sets the global Emergency Kill Switch state for a user.
+   */
+  static setEmergencyKillSwitch(userId: string, isFrozen: boolean) {
+    if (isFrozen) {
+      userEmergencyKillSwitches.add(userId);
+    } else {
+      userEmergencyKillSwitches.delete(userId);
+    }
+  }
+
+  static isKillSwitchActive(userId: string): boolean {
+    return userEmergencyKillSwitches.has(userId);
+  }
+
   /**
    * Evaluates if an email thread matches a given condition.
    */
@@ -111,12 +131,13 @@ export class AutomationService {
   }
 
   /**
-   * Evaluates all active automation rules for a user against a newly synced or updated thread.
+   * Evaluates all active automation rules for a user against a newly synced thread.
    */
   static async evaluateThreadRules(
     userId: string,
     thread: {
       id: string;
+      accountId?: string;
       subject?: string | null;
       senderEmail?: string | null;
       category?: string | null;
@@ -126,6 +147,20 @@ export class AutomationService {
       hasAttachments?: boolean;
     }
   ) {
+    // 1. Check Global Emergency Kill Switch
+    if (this.isKillSwitchActive(userId)) {
+      await prisma.automationLog.create({
+        data: {
+          userId,
+          threadId: thread.id,
+          actionExecuted: "ABORTED",
+          status: "BLOCKED_GUARDRAIL",
+          diagnostics: { reason: "Global Emergency Kill Switch is currently ACTIVE" },
+        },
+      });
+      return { matched: false, blockedByKillSwitch: true };
+    }
+
     const activeRules = await prisma.automationRule.findMany({
       where: { userId, isActive: true },
       orderBy: { priorityOrder: "desc" },
@@ -137,6 +172,14 @@ export class AutomationService {
     const senderDomain = senderEmail.includes("@")
       ? senderEmail.split("@")[1]
       : "";
+
+    // 2. Loop Prevention Check (No-reply, Mailer-daemon, automated bounces)
+    const isBotOrLoop =
+      senderEmail.includes("no-reply") ||
+      senderEmail.includes("noreply") ||
+      senderEmail.includes("mailer-daemon") ||
+      senderEmail.includes("bounce") ||
+      senderEmail.includes("notifications@");
 
     const threadContext = {
       senderEmail,
@@ -155,28 +198,24 @@ export class AutomationService {
       const conditions = (rule.conditions as unknown as RuleCondition[]) || [];
       const actions = (rule.actions as unknown as RuleAction[]) || [];
 
-      // Check if all conditions match (AND logic)
+      // Evaluate condition set
       const isMatch =
         conditions.length > 0 &&
         conditions.every((cond) => this.evaluateCondition(cond, threadContext));
 
       if (isMatch) {
-        // Execute rule actions
         for (const action of actions) {
+          // Action 1: GENERATE_AI_DRAFT
           if (action.type === "GENERATE_AI_DRAFT") {
             try {
               const tone = action.parameters?.tone || "concise";
               const draft = await AIService.getDraftResponse(thread.id, tone);
 
-              // Update thread with pre-generated draft
               await prisma.thread.update({
                 where: { id: thread.id },
-                data: {
-                  suggestedReply: draft.draftText,
-                },
+                data: { suggestedReply: draft.draftText },
               });
 
-              // Log success
               await prisma.automationLog.create({
                 data: {
                   userId,
@@ -194,7 +233,6 @@ export class AutomationService {
                 },
               });
 
-              // Update rule execution counters
               await prisma.automationRule.update({
                 where: { id: rule.id },
                 data: {
@@ -222,6 +260,176 @@ export class AutomationService {
               });
             }
           }
+
+          // Action 2: SAFE_AUTO_SEND with Multi-Layered Guardrails
+          else if (action.type === "SAFE_AUTO_SEND") {
+            // Guardrail A: Loop Prevention
+            if (isBotOrLoop) {
+              await prisma.automationLog.create({
+                data: {
+                  userId,
+                  ruleId: rule.id,
+                  threadId: thread.id,
+                  emailSubject: thread.subject || null,
+                  senderEmail: senderEmail || null,
+                  actionExecuted: "AUTO_SENT",
+                  status: "BLOCKED_GUARDRAIL",
+                  diagnostics: { reason: "Loop Prevention: Blocked auto-send to automated/no-reply sender" },
+                },
+              });
+              continue;
+            }
+
+            // Guardrail B: Negative Sentiment / Escalation Bailout
+            if (
+              threadContext.sentiment === "NEGATIVE" ||
+              threadContext.sentiment === "URGENT_COMPLAINT" ||
+              threadContext.priority === "URGENT" ||
+              threadContext.urgencyScore >= 8
+            ) {
+              await prisma.automationLog.create({
+                data: {
+                  userId,
+                  ruleId: rule.id,
+                  threadId: thread.id,
+                  emailSubject: thread.subject || null,
+                  senderEmail: senderEmail || null,
+                  actionExecuted: "AUTO_SENT",
+                  status: "BLOCKED_GUARDRAIL",
+                  diagnostics: {
+                    reason: "Sentiment / Escalation Guardrail: Negative sentiment or high urgency detected. Downgraded to manual review.",
+                  },
+                },
+              });
+              continue;
+            }
+
+            // Guardrail C: Rate Limiter (Max 5 auto-sends per hour)
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            const autoSendsInLastHour = await prisma.automationLog.count({
+              where: {
+                userId,
+                actionExecuted: "AUTO_SENT",
+                status: "SUCCESS",
+                createdAt: { gte: oneHourAgo },
+              },
+            });
+
+            if (autoSendsInLastHour >= 5) {
+              await prisma.automationLog.create({
+                data: {
+                  userId,
+                  ruleId: rule.id,
+                  threadId: thread.id,
+                  emailSubject: thread.subject || null,
+                  senderEmail: senderEmail || null,
+                  actionExecuted: "AUTO_SENT",
+                  status: "BLOCKED_GUARDRAIL",
+                  diagnostics: { reason: "Hourly rate limit exceeded (Max 5 auto-sends per hour)" },
+                },
+              });
+              continue;
+            }
+
+            // Guardrail D: Recipient Allowlist verification
+            const allowlistDomains = action.parameters?.allowlistDomains || [];
+            const allowlistSenders = action.parameters?.allowlistSenders || [];
+
+            if (
+              allowlistDomains.length > 0 &&
+              !allowlistDomains.includes(senderDomain)
+            ) {
+              await prisma.automationLog.create({
+                data: {
+                  userId,
+                  ruleId: rule.id,
+                  threadId: thread.id,
+                  emailSubject: thread.subject || null,
+                  senderEmail: senderEmail || null,
+                  actionExecuted: "AUTO_SENT",
+                  status: "BLOCKED_GUARDRAIL",
+                  diagnostics: {
+                    reason: `Domain ${senderDomain} not in rule allowlist domains: [${allowlistDomains.join(", ")}]`,
+                  },
+                },
+              });
+              continue;
+            }
+
+            // All Guardrails Passed: Queue delayed dispatch (with 60-second grace cancellation window)
+            try {
+              const account = thread.accountId
+                ? await prisma.gmailAccount.findUnique({ where: { id: thread.accountId } })
+                : await prisma.gmailAccount.findFirst({ where: { userId } });
+
+              if (!account) {
+                throw new Error("No linked Gmail account found for dispatch");
+              }
+
+              const draft = await AIService.getDraftResponse(
+                thread.id,
+                action.parameters?.tone || "formal"
+              );
+
+              const scheduledDispatchAt = new Date(Date.now() + 60 * 1000); // 60s delay window
+
+              await ScheduledEmailService.createScheduledEmail({
+                userId,
+                accountId: account.id,
+                threadId: thread.id,
+                to: senderEmail,
+                subject: thread.subject?.startsWith("Re:")
+                  ? thread.subject
+                  : `Re: ${thread.subject || ""}`,
+                bodyText: draft.draftText,
+                scheduledAt: scheduledDispatchAt,
+                userFormattedTime: "Auto-send (60s grace period)",
+              });
+
+              await prisma.automationLog.create({
+                data: {
+                  userId,
+                  ruleId: rule.id,
+                  threadId: thread.id,
+                  emailSubject: thread.subject || null,
+                  senderEmail: senderEmail || null,
+                  actionExecuted: "AUTO_SENT",
+                  status: "SUCCESS",
+                  diagnostics: {
+                    ruleName: rule.name,
+                    scheduledAt: scheduledDispatchAt.toISOString(),
+                    gracePeriodSeconds: 60,
+                  },
+                },
+              });
+
+              await prisma.automationRule.update({
+                where: { id: rule.id },
+                data: {
+                  totalTriggered: { increment: 1 },
+                  lastTriggeredAt: new Date(),
+                },
+              });
+
+              results.push({
+                ruleId: rule.id,
+                action: "AUTO_SENT",
+                status: "QUEUED_SAFE_SEND",
+              });
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : "Error executing safe auto-send";
+              await prisma.automationLog.create({
+                data: {
+                  userId,
+                  ruleId: rule.id,
+                  threadId: thread.id,
+                  actionExecuted: "AUTO_SENT",
+                  status: "ERROR",
+                  diagnostics: { error: msg },
+                },
+              });
+            }
+          }
         }
       }
     }
@@ -243,9 +451,17 @@ export class AutomationService {
   }
 
   /**
-   * Creates a new automation rule.
+   * Creates a new automation rule with validation.
    */
   static async createRule(userId: string, input: CreateRuleInput) {
+    // Validate auto-send rules require explicit configuration
+    const hasAutoSend = input.actions.some((a) => a.type === "SAFE_AUTO_SEND");
+    if (hasAutoSend) {
+      if (input.conditions.length === 0) {
+        throw new Error("Safe auto-send rules require at least one specific condition.");
+      }
+    }
+
     return await prisma.automationRule.create({
       data: {
         userId,
