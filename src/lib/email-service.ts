@@ -218,5 +218,52 @@ export class EmailService {
       threadId: `thread_new_${Date.now()}`,
     };
   }
+
+  /**
+   * Schedules an email for future delivery.
+   */
+  static async scheduleEmail(params: {
+    to: string | string[];
+    subject: string;
+    bodyText: string;
+    cc?: string | string[];
+    bcc?: string | string[];
+    scheduledAt: string; // ISO string in UTC
+    userTimezone: string; // e.g. "America/New_York"
+    userFormattedTime: string; // e.g. "Tomorrow at 8:00 AM"
+    threadId?: string;
+  }): Promise<{ success: boolean; scheduledId?: string; error?: string }> {
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/gmail/schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          return {
+            success: true,
+            scheduledId: data.scheduledId,
+          };
+        } else {
+          return {
+            success: false,
+            error: data.error || `Server returned error (${res.status})`,
+          };
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Network error";
+        console.warn("[EmailService] scheduleEmail API request failed:", err);
+        return { success: false, error: msg };
+      }
+    }
+
+    return {
+      success: true,
+      scheduledId: `sched_${Date.now()}`,
+    };
+  }
 }
 

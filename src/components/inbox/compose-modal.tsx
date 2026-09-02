@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
 import { EmailService } from "@/lib/email-service";
+import { SplitSendButton } from "./scheduled-send-popover";
 import {
   Send,
   Sparkles,
@@ -108,6 +109,65 @@ export function ComposeModal({
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Unexpected error sending email";
+      setErrorMessage(msg);
+      setIsSending(false);
+    }
+  };
+
+  const handleScheduleSend = async (
+    scheduledAt: Date,
+    formattedTime: string,
+    timezone: string
+  ) => {
+    setErrorMessage(null);
+
+    const trimmedTo = to.trim();
+    const trimmedBody = bodyText.trim();
+
+    if (!trimmedTo) {
+      setErrorMessage("Please specify at least one recipient email address.");
+      return;
+    }
+
+    if (!trimmedBody) {
+      setErrorMessage("Please enter email body text before scheduling.");
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      const result = await EmailService.scheduleEmail({
+        to: trimmedTo,
+        subject: subject.trim() || "(No Subject)",
+        bodyText: trimmedBody,
+        cc: cc.trim() || undefined,
+        scheduledAt: scheduledAt.toISOString(),
+        userTimezone: timezone,
+        userFormattedTime: formattedTime,
+      });
+
+      if (!result.success) {
+        setErrorMessage(
+          result.error ||
+            "Failed to schedule email. Please check your connection."
+        );
+        setIsSending(false);
+        return;
+      }
+
+      setSuccessMessage(
+        `Email scheduled for ${formattedTime} (${timezone}).`
+      );
+      setIsSending(false);
+
+      setTimeout(() => {
+        if (onSentSuccess) onSentSuccess();
+        onClose();
+      }, 1500);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Error scheduling email";
       setErrorMessage(msg);
       setIsSending(false);
     }
@@ -349,26 +409,13 @@ export function ComposeModal({
               Cancel
             </Button>
 
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleSend}
+            <SplitSendButton
+              onSendNow={handleSend}
+              onScheduleSend={handleScheduleSend}
+              isSending={isSending}
               disabled={isSending || !!successMessage}
-              className="space-x-1.5"
-              type="button"
-            >
-              {isSending ? (
-                <>
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Sending via Gmail...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="h-3 w-3" />
-                  <span>Send Email</span>
-                </>
-              )}
-            </Button>
+              sendLabel={isSending ? "Sending..." : "Send Email"}
+            />
           </div>
         </div>
       </div>

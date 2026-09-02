@@ -5,8 +5,9 @@ import { AIDraftResponse, ToneModifier } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutKey } from "@/components/ui/shortcut-key";
-import { Send, RefreshCw, AlertCircle } from "lucide-react";
+import { Send, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { EmailService } from "@/lib/email-service";
+import { SplitSendButton } from "./scheduled-send-popover";
 
 interface AIDraftComposerProps {
   threadId: string;
@@ -25,6 +26,7 @@ export function AIDraftComposer({
   const [isSending, setIsSending] = React.useState(false);
   const [archiveAfterSend, setArchiveAfterSend] = React.useState(true);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -129,6 +131,46 @@ export function AIDraftComposer({
     }
   };
 
+  const handleScheduleReply = async (
+    scheduledAt: Date,
+    formattedTime: string,
+    timezone: string
+  ) => {
+    if (!draftText.trim()) return;
+    setErrorMessage(null);
+    setIsSending(true);
+
+    try {
+      const result = await EmailService.scheduleEmail({
+        threadId,
+        to: "recipient",
+        subject: "Re: Thread",
+        bodyText: draftText.trim(),
+        scheduledAt: scheduledAt.toISOString(),
+        userTimezone: timezone,
+        userFormattedTime: formattedTime,
+      });
+
+      if (!result.success) {
+        setErrorMessage(
+          result.error || "Failed to schedule reply. Please try again."
+        );
+        setIsSending(false);
+        return;
+      }
+
+      setSuccessMessage(`Reply scheduled for ${formattedTime}.`);
+      setIsSending(false);
+      setTimeout(() => {
+        onSentSuccess();
+      }, 1500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error scheduling reply";
+      setErrorMessage(msg);
+      setIsSending(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
@@ -151,6 +193,14 @@ export function AIDraftComposer({
               {errorMessage}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Success Alert */}
+      {successMessage && (
+        <div className="flex items-center space-x-2 rounded-md border border-[var(--status-success-border)] bg-[var(--status-success-subtle)] p-3 text-xs text-[var(--status-success)]">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span className="font-medium">{successMessage}</span>
         </div>
       )}
 
@@ -233,25 +283,13 @@ export function AIDraftComposer({
           </label>
         </div>
 
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleSend}
-          disabled={isSending || isLoading || !draftText.trim()}
-          className="space-x-1.5 transition-all duration-150"
-        >
-          {isSending ? (
-            <>
-              <RefreshCw className="h-3 w-3 animate-spin" />
-              <span>Sending via Gmail...</span>
-            </>
-          ) : (
-            <>
-              <Send className="h-3 w-3" />
-              <span>{archiveAfterSend ? "Send & Archive" : "Send Reply"}</span>
-            </>
-          )}
-        </Button>
+        <SplitSendButton
+          onSendNow={handleSend}
+          onScheduleSend={handleScheduleReply}
+          isSending={isSending}
+          disabled={isSending || isLoading || !draftText.trim() || !!successMessage}
+          sendLabel={archiveAfterSend ? "Send & Archive" : "Send Reply"}
+        />
       </div>
     </div>
   );
