@@ -5,6 +5,7 @@ import { EmailThread } from "@/types/email";
 import { ExecutiveBriefing } from "@/types/ai";
 import { BriefingBanner } from "./briefing-banner";
 import { HighPriorityFeed } from "./high-priority-feed";
+import { WaitingOnRadar } from "./waiting-on-radar";
 import { RefreshCw } from "lucide-react";
 import { getCachedThreads, setCachedThreads } from "@/lib/client-cache";
 
@@ -158,7 +159,10 @@ export function DashboardClientView({ initialBriefing }: DashboardClientViewProp
       {/* 1. Executive Briefing Banner */}
       <BriefingBanner briefing={dynamicBriefing} />
 
-      {/* 2. Priority Feed Overview */}
+      {/* 2. Waiting-On Dependency Radar */}
+      <WaitingOnRadar />
+
+      {/* 3. Priority Feed Overview */}
       <HighPriorityFeed threads={urgentThreads.length > 0 ? urgentThreads : threads} />
     </div>
   );
